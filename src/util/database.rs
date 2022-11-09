@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc, Duration};
 use mongodb::{
     bson::oid::ObjectId,
     Client,
@@ -69,4 +70,15 @@ pub async fn get_database(ctx: Arc<Context>) -> Arc<DbHandle> {
     d.get::<DatabaseHandle>()
         .expect("Error retrieving Database Handler")
         .clone()
+}
+
+
+impl Weekend {
+    pub fn time_from_now(&self) -> Duration {
+        self.start_time().signed_duration_since(Utc::now())
+    }
+
+    pub fn start_time(&self) -> DateTime<Utc> {
+        self.start.parse::<DateTime<Utc>>().expect("Error Parsing datetime.")
+    }
 }

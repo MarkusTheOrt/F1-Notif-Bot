@@ -100,10 +100,12 @@ impl EventHandler for Bot {
                 println!("dbName: {}", db.db.name());
                 loop {
                     if let Ok(mut cur) = db.weekends.find(doc! {}, None).await {
+                        
                         while let Some(wknd) =
                             cur.try_next().await.expect("failed in loop")
                         {
-                            println!("weekend: {:?}", wknd);
+                            let t = wknd.time_from_now();
+                            println!("weekend: {} - {:?}", wknd.name, t);
                         }
                     } else {
                         println!("Not OK!");
