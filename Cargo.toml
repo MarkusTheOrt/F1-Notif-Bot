@@ -1,0 +1,16 @@
+[package]
+name = "f1-notif-bot"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = "0.4.22"
+dotenvy = "0.15.5"
+mongodb = { version = "2.3.1", features = [ "tokio-runtime" ] }
+tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread", "signal"] }
+serenity = { version = "0.11.5", features = [] }
+serde = { version = "1.0.145", features = ["derive"] }
+sqlx = { version = "0.6.2", features = ["runtime-tokio-rustls", "postgres", "time"] }
+sysinfo = "0.26.4"

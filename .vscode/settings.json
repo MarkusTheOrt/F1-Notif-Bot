@@ -1,0 +1,11 @@
+{
+  "editor.formatOnSave": true,
+  "task.allowAutomaticTasks": "on",
+  "rust-analyzer.checkOnSave.overrideCommand": [
+    "cargo",
+    "+nightly",
+    "clippy",
+    "--message-format=json"
+  ],
+  "editor.tabSize": 4
+}
