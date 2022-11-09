@@ -7,5 +7,6 @@
     "clippy",
     "--message-format=json"
   ],
-  "editor.tabSize": 4
+  "editor.tabSize": 4,
+  "editor.defaultFormatter": "rust-lang.rust-analyzer"
 }

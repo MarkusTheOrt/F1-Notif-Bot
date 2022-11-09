@@ -17,13 +17,10 @@ use std::{
 use dotenvy::dotenv;
 use serenity::{
     async_trait,
-    builder::CreateApplicationCommands,
-    cache::FromStrAndCache,
     framework::standard::{
         macros::group,
         StandardFramework,
     },
-    futures::TryStreamExt,
     http::Http,
     model::{
         application::command::Command,
@@ -32,10 +29,17 @@ use serenity::{
     },
     prelude::*,
 };
-use util::database::{
-    get_database,
-    DatabaseHandle,
-    DbHandle,
+use util::{
+    database::{
+        get_database,
+        DatabaseHandle,
+        DbHandle,
+        Weekend,
+    },
+    tools::{
+        best_weekend,
+        filter_weekends,
+    },
 };
 
 use mongodb::bson::doc;
@@ -75,8 +79,8 @@ impl EventHandler for Bot {
 
     async fn message_delete(
         &self,
-        ctx: Context,
-        channel_id: ChannelId,
+        _ctx: Context,
+        _channel_id: ChannelId,
         _deleted_message_id: MessageId,
         _guild_id: Option<GuildId>,
     ) {
@@ -100,12 +104,19 @@ impl EventHandler for Bot {
                 println!("dbName: {}", db.db.name());
                 loop {
                     if let Ok(mut cur) = db.weekends.find(doc! {}, None).await {
-                        
-                        while let Some(wknd) =
-                            cur.try_next().await.expect("failed in loop")
-                        {
-                            let t = wknd.time_from_now();
-                            println!("weekend: {} - {:?}", wknd.name, t);
+                        let wk = filter_weekends(&mut cur).await;
+                        if let Some(weekend) = best_weekend(&wk) {
+                            if let Some(sess) = weekend.next_session() {
+                                println!(
+                                    "Next Session: {} [{}]: {} (in {} minutes)",
+                                    weekend.name,
+                                    sess.r#type,
+                                    sess.start,
+                                    sess.time_from_now().num_minutes()
+                                );
+                            }
+                        } else {
+                            println!("Couldn't find weekends");
                         }
                     } else {
                         println!("Not OK!");
@@ -154,11 +165,11 @@ impl EventHandler for Bot {
 async fn main() {
     if let Err(why) = dotenv() {
         println!("Couldn't find .env file: {}", why);
-        if let Err(_) = env::var("DISCORD_TOKEN") {
+        if env::var("DISCORD_TOKEN").is_err() {
             println!("Couldn't read DISCORD_TOKEN env variable.");
             return;
         }
-        if let Err(_) = env::var("MONGO_URL") {
+        if env::var("MONGO_URL").is_err() {
             println!("Couldn't read MONGO_URL env variable");
             return;
         }

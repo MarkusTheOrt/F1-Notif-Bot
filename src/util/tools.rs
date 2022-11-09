@@ -1,22 +1,29 @@
-use std::usize;
+use mongodb::Cursor;
+use serenity::futures::TryStreamExt;
 
-use chrono::prelude::*;
 use super::database::Weekend;
 
+pub async fn filter_weekends(cur: &mut Cursor<Weekend>) -> Vec<Weekend> {
+    let mut weekends: Vec<Weekend> = vec![];
+    while let Some(weekend) = cur.try_next().await.unwrap_or(None) {
+        if weekend.prolly_too_old() {
+            continue;
+        }
+        weekends.push(weekend.clone());
+    }
+    weekends
+}
 
-
-pub fn get_best_weekend(weekends: &Vec<Weekend>) -> Option<&Weekend> {
-    let mut best_match = -1;
-    for (i, weekend) in weekends.iter().filter(|f| !f.done.unwrap_or(true)).enumerate() {
-        if let Ok(time) = weekend.start.parse::<DateTime<Utc>>() {
-            let diff = Utc::now().signed_duration_since(time);
-            if diff.num_minutes() < best_match || best_match == -1{
-                best_match = diff.num_minutes()
+pub fn best_weekend(weekends: &[Weekend]) -> Option<Weekend> {
+    let mut best_match: Option<&Weekend> = None;
+    for (_, weekend) in weekends.iter().enumerate() {
+        if let Some(best) = best_match {
+            if weekend.time_from_now() < best.time_from_now() {
+                best_match = Some(weekend)
             }
+        } else if best_match.is_none() {
+            best_match = Some(weekend);
         }
     }
-    if best_match == -1 {
-        return None;
-    }
-    weekends.get(best_match as usize)
+    best_match.cloned()
 }
