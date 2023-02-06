@@ -41,6 +41,7 @@ use serenity::{
 
 use crate::util::database::{
     filter_current_weekend,
+    DiscordString,
     Weekend,
 };
 
@@ -117,6 +118,7 @@ impl EventHandler for Bot {
                         last_hash = h;
                         // Update message here
                     }
+                    println!("debugstr: \n{}", wknd.to_display());
                 }
 
                 // Okay, to make sure we don't update the message every minute

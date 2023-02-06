@@ -72,6 +72,96 @@ pub struct PracticeSession {
     pub notified: bool,
 }
 
+pub trait DiscordString {
+    fn to_display(&self) -> String;
+}
+
+impl DiscordString for Race {
+    fn to_display(&self) -> String {
+        let timestamp = self.time.timestamp();
+        format!("> **`Race:      `** <t:{timestamp}:f> 	(<t:{timestamp}:R>)")
+    }
+}
+
+impl DiscordString for Qualifying {
+    fn to_display(&self) -> String {
+        let timestamp = self.time.timestamp();
+        let strikethrough = if self.notified {
+            "~~"
+        } else {
+            ""
+        };
+        format!("> {strikethrough}**`Qualifying:`** <t:{timestamp}:f> 	(<t:{timestamp}:R>){strikethrough}")
+    }
+}
+
+impl DiscordString for PracticeSession {
+    fn to_display(&self) -> String {
+        let timestamp = self.time.timestamp();
+        let strikethrough = if self.notified {
+            "~~"
+        } else {
+            ""
+        };
+        format!(
+            "> {strikethrough}**`FP{}:       `** <t:{timestamp}:f> 	(<t:{timestamp}:R>){strikethrough}",
+            self.number
+        )
+    }
+}
+
+impl DiscordString for SessionType {
+    fn to_display(&self) -> String {
+        let (name, timestamp, strikethrough) = match self {
+            SessionType::None => ("Unsupported:".to_owned(), 0, false),
+            SessionType::Test(sess) => (
+                "Testing session:".to_owned(),
+                sess.time.timestamp(),
+                sess.notified,
+            ),
+            SessionType::Practice(sess) => (
+                format!("FP{}:       ", sess.number),
+                sess.time.timestamp(),
+                sess.notified,
+            ),
+            SessionType::Qualifying(sess) => (
+                "Qualifying: ".to_owned(),
+                sess.time.timestamp(),
+                sess.notified,
+            ),
+            SessionType::Sprint(sess) => (
+                "Sprint Race:".to_owned(),
+                sess.time.timestamp(),
+                sess.notified,
+            ),
+            SessionType::Race(sess) => (
+                "Race:       ".to_owned(),
+                sess.time.timestamp(),
+                sess.notified,
+            ),
+        };
+
+        let strikethrough = if strikethrough {
+            "~~"
+        } else {
+            ""
+        };
+        format!("\n> {strikethrough}**`{name}`**  <t:{timestamp}:f> \t{strikethrough}(<t:{timestamp}:R>)")
+    }
+}
+
+impl DiscordString for Weekend {
+    fn to_display(&self) -> String {
+        let name = &self.name;
+        let mut content = format!("**{name}**");
+        for (_, sess) in self.sessions.iter().enumerate() {
+            content += sess.to_display().as_str();
+        }
+        content += "\n\n\nClick :mega: in <#913752470293991424> to get a notification when a session is live.";
+        content
+    }
+}
+
 impl Default for Race {
     fn default() -> Self {
         Self {
