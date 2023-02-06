@@ -1,137 +1,272 @@
 #![allow(dead_code)]
+
+use std::time::Duration;
+
 use chrono::{
     DateTime,
-    Duration,
     Utc,
 };
 use mongodb::{
-    bson::oid::ObjectId,
-    Client,
+    bson::doc,
     Collection,
-    Database,
 };
 use serde::{
     Deserialize,
     Serialize,
 };
-use serenity::prelude::{
-    Context,
-    TypeMapKey,
-};
-use std::sync::Arc;
+use serenity::futures::StreamExt;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Session {
-    pub r#type: String,
-    pub start: String,
-    pub name: Option<String>,
-    pub notified: Option<bool>,
-}
+use crate::error::Error;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash)]
 pub struct Weekend {
-    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
-    pub id: Option<ObjectId>,
     pub name: String,
-    pub year: i32,
-    pub prefix: String,
-    pub start: String,
-    pub done: Option<bool>,
-    pub sessions: Vec<Session>,
+    pub start: DateTime<Utc>,
+    pub sessions: Vec<SessionType>,
+    pub done: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Message {
-    pub _id: ObjectId,
-    pub weekend: ObjectId,
-    pub session: i32,
-    pub message: String,
-    pub channel: String,
-    pub date: String,
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash)]
+pub enum SessionType {
+    None,
+    // Test sessions (usually at the start of a season)
+    Test(TestSession),
+    // Pratice sessions (FP1, FP2, FP3)
+    Practice(PracticeSession),
+    // Qualifying (Includes both Sprint and Race Quali)
+    Qualifying(Qualifying),
+    // Sprint Race ()
+    Sprint(Race),
+    Race(Race),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Setting<T> {
-    pub name: String,
-    pub value: Option<T>,
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash)]
+pub struct Race {
+    pub time: DateTime<Utc>,
+    pub notified: bool,
+    pub duration: Duration,
 }
 
-pub struct DbHandle {
-    pub client: Arc<Client>,
-    pub db: Arc<Database>,
-    pub weekends: Arc<Collection<Weekend>>,
-    pub messages: Arc<Collection<Message>>,
-    pub settings: Arc<Collection<Setting<String>>>,
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash)]
+pub struct Qualifying {
+    pub time: DateTime<Utc>,
+    pub notified: bool,
+    pub duration: Duration,
 }
 
-pub struct DatabaseHandle {}
-
-impl TypeMapKey for DatabaseHandle {
-    type Value = Arc<DbHandle>;
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash, Default)]
+pub struct TestSession {
+    pub time: DateTime<Utc>,
+    pub notified: bool,
 }
 
-pub async fn get_database(ctx: Arc<Context>) -> Arc<DbHandle> {
-    let d = ctx.data.read().await;
-    d.get::<DatabaseHandle>()
-        .expect("Error retrieving Database Handler")
-        .clone()
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash)]
+pub struct PracticeSession {
+    // The start time of the session
+    pub time: DateTime<Utc>,
+    // Session Number (FP1, FP2, FP3)
+    pub number: u8,
+    // Estimated duration of a session
+    pub duration: Duration,
+    // Whether or not a session has been notified
+    pub notified: bool,
+}
+
+impl Default for Race {
+    fn default() -> Self {
+        Self {
+            time: Default::default(),
+            notified: false,
+            duration: Duration::from_secs(2 * 60 * 60),
+        }
+    }
+}
+
+impl Default for Qualifying {
+    fn default() -> Self {
+        Self {
+            time: Default::default(),
+            notified: false,
+            duration: Duration::from_secs(60 * 60),
+        }
+    }
+}
+
+impl Default for PracticeSession {
+    fn default() -> Self {
+        Self {
+            time: Default::default(),
+            number: 1,
+            duration: Duration::from_secs(60 * 90),
+            notified: false,
+        }
+    }
+}
+
+pub trait Sessions {
+    fn get_duration(&self) -> chrono::Duration;
+}
+
+impl Sessions for PracticeSession {
+    fn get_duration(&self) -> chrono::Duration {
+        self.time - Utc::now()
+    }
+}
+
+impl Sessions for TestSession {
+    fn get_duration(&self) -> chrono::Duration {
+        self.time - Utc::now()
+    }
+}
+
+impl Sessions for Qualifying {
+    fn get_duration(&self) -> chrono::Duration {
+        self.time - Utc::now()
+    }
+}
+
+impl Sessions for Race {
+    fn get_duration(&self) -> chrono::Duration {
+        self.time - Utc::now()
+    }
+}
+
+#[allow(clippy::needless_return)]
+pub async fn filter_current_weekend(
+    weekends: &Collection<Weekend>
+) -> Result<Option<Weekend>, Error> {
+    let mut cursor = weekends.find(doc! { "done": false }, None).await?;
+    let mut best_start = None;
+    let mut best_doc = None;
+    while let Some(doc) = cursor.next().await {
+        let doc = doc?;
+        if doc.done {
+            continue;
+        }
+        // Discard any dates older than 4 days, no weekend will make sense at
+        // that point.
+        if doc.start.signed_duration_since(Utc::now()).num_days() < -4 {
+            continue;
+        }
+
+        best_start = if best_start.is_none()
+            || best_start.unwrap() < doc.start - Utc::now()
+        {
+            best_doc = Some(doc.clone());
+            Some(doc.start - Utc::now())
+        } else {
+            best_start
+        }
+    }
+
+    Ok(best_doc)
+}
+
+impl SessionType {
+    pub fn get_duration(&self) -> Option<chrono::Duration> {
+        match self {
+            SessionType::None => None,
+            SessionType::Test(sess) => Some(sess.get_duration()),
+            SessionType::Practice(sess) => Some(sess.get_duration()),
+            SessionType::Qualifying(sess) => Some(sess.get_duration()),
+            SessionType::Sprint(sess) | SessionType::Race(sess) => {
+                Some(sess.get_duration())
+            },
+        }
+    }
 }
 
 impl Weekend {
-    /// Checks
-    pub fn time_from_now(&self) -> Duration {
-        self.start_time().signed_duration_since(Utc::now())
-    }
-
-    /// Checks if the session is too old to be considered.
-    /// This is within a reasonable doubt.
-    pub fn prolly_too_old(&self) -> bool {
-        self.time_from_now().num_days() < -4
-    }
-
-    pub fn start_time(&self) -> DateTime<Utc> {
-        self.start.parse::<DateTime<Utc>>().expect("Error Parsing datetime.")
-    }
-
-    pub fn next_session(&self) -> Option<&Session> {
-        let mut best_session: Option<&Session> = None;
-        for (_, session) in self
-            .sessions
-            .iter()
-            .filter(|session| !session.notified.unwrap_or(false))
-            .enumerate()
-        {
-            if session.time_from_now().num_minutes() > 0
-                && best_session.is_none()
+    pub fn get_next_session(&self) -> SessionType {
+        let mut best_match = None;
+        let mut best_time = None;
+        for (_, sess) in self.sessions.iter().enumerate() {
+            best_time = if sess.get_duration().is_none()
+                || sess.get_duration().unwrap().num_minutes().abs()
+                    < best_time.unwrap()
             {
-                best_session = Some(session)
-            }
-            if best_session.is_some()
-                && session.time_from_now()
-                    < best_session.unwrap().time_from_now()
-            {
-                best_session = Some(session)
+                best_match = Some(sess.to_owned());
+                Some(sess.get_duration().unwrap().num_minutes().abs())
+            } else {
+                best_time
             }
         }
-        best_session
+        match best_match {
+            None => SessionType::None,
+            _ => best_match.unwrap(),
+        }
     }
 }
 
-impl PartialEq for Session {
-    fn eq(
-        &self,
-        other: &Self,
-    ) -> bool {
-        self.r#type == other.r#type
+#[derive(Debug, Serialize, Deserialize, Hash, Copy, Clone)]
+pub enum BotMessageType {
+    None,
+    Notification(BotNotification),
+    Persistent(BotPersistent),
+}
+
+#[derive(Debug, Serialize, Deserialize, Hash, Copy, Clone)]
+pub struct BotNotification {
+    pub time_sent: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Hash, Copy, Clone)]
+pub struct BotPersistent {
+    pub hash: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Hash, Copy, Clone)]
+pub struct BotMessage {
+    pub discord_id: u64,
+    pub kind: BotMessageType,
+}
+
+impl Default for BotMessage {
+    fn default() -> Self {
+        Self {
+            discord_id: 0,
+            kind: BotMessageType::None,
+        }
     }
 }
 
-impl Session {
-    pub fn time_from_now(&self) -> Duration {
-        self.start_time().signed_duration_since(Utc::now())
+impl Default for BotNotification {
+    fn default() -> Self {
+        Self {
+            time_sent: Utc::now(),
+        }
+    }
+}
+
+impl BotMessage {
+    pub fn new_now(
+        id: u64,
+        kind: BotMessageType,
+    ) -> Self {
+        Self {
+            discord_id: id,
+            kind,
+        }
     }
 
-    pub fn start_time(&self) -> DateTime<Utc> {
-        self.start.parse::<DateTime<Utc>>().expect("Error Parsing datetime")
+    pub fn new_notification(id: u64) -> Self {
+        Self {
+            discord_id: id,
+            kind: BotMessageType::Notification(BotNotification {
+                time_sent: Utc::now(),
+            }),
+        }
+    }
+
+    pub fn new_persistent(
+        id: u64,
+        hash: u64,
+    ) -> Self {
+        Self {
+            discord_id: id,
+            kind: BotMessageType::Persistent(BotPersistent {
+                hash,
+            }),
+        }
     }
 }

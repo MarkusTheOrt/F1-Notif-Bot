@@ -1,9 +1,22 @@
-mod commands;
-mod util;
+pub mod config;
+pub mod error;
+pub mod util;
+
+use error::Result;
+use mongodb::Client;
 
 use std::{
-    collections::HashSet,
-    env,
+    collections::hash_map::DefaultHasher,
+    fs::File,
+    hash::{
+        Hash,
+        Hasher,
+    },
+    io::{
+        self,
+        Read,
+        Write,
+    },
     sync::{
         atomic::{
             AtomicBool,
@@ -14,67 +27,37 @@ use std::{
     time::Duration,
 };
 
-use dotenvy::dotenv;
+use config::Config;
 use serenity::{
     async_trait,
-    framework::standard::{
-        macros::group,
-        StandardFramework,
-    },
-    http::Http,
-    model::{
-        application::command::Command,
-        prelude::*,
-        user::OnlineStatus,
-    },
-    prelude::*,
-};
-use util::{
-    database::{
-        get_database,
-        DatabaseHandle,
-        DbHandle,
-        Weekend,
-    },
-    tools::{
-        best_weekend,
-        filter_weekends,
+    client::ClientBuilder,
+    framework::StandardFramework,
+    model::prelude::*,
+    prelude::{
+        Context,
+        EventHandler,
     },
 };
 
-use mongodb::bson::doc;
-
-#[group]
-struct General;
+use crate::util::database::{
+    filter_current_weekend,
+    Weekend,
+};
 
 struct Bot {
-    is_watcher_running: AtomicBool,
-    is_deleter_running: AtomicBool,
-    is_permanent_message_running: AtomicBool,
+    is_mainthread_running: AtomicBool,
+    pub config: Arc<Config>,
 }
 
 #[async_trait]
 impl EventHandler for Bot {
     async fn ready(
         &self,
-        ctx: Context,
-        _ready: Ready,
+        _ctx: Context,
+        ready: Ready,
     ) {
-        println!("Connected!");
-        ctx.set_presence(
-            Some(Activity::watching("out for new sessions.")),
-            OnlineStatus::Online,
-        )
-        .await;
-        if let Err(why) =
-            Command::set_global_application_commands(&ctx.http, |commands| {
-                commands
-                    .create_application_command(|f| commands::ping::register(f))
-            })
-            .await
-        {
-            println!("Error Registering Global Commands: {}", why);
-        }
+        let user = &ready.user;
+        println!("Client connected as {}#{}", user.name, user.discriminator);
     }
 
     async fn message_delete(
@@ -88,69 +71,59 @@ impl EventHandler for Bot {
 
     async fn cache_ready(
         &self,
-        ctx: Context,
+        _ctx: Context,
         _guilds: Vec<GuildId>,
     ) {
-        println!("Cache built and populated.");
+        if self.is_mainthread_running.load(Ordering::Relaxed) {
+            return;
+        }
 
-        let ctx = Arc::new(ctx);
+        self.is_mainthread_running.swap(true, Ordering::Relaxed);
 
-        if !self.is_watcher_running.load(Ordering::Relaxed) {
-            println!("Notifications service started.");
-            let ctx1 = Arc::clone(&ctx);
+        let conf = self.config.clone();
+        tokio::spawn(async move {
+            println!("Started Watcher thread.");
+            let mongoconf = &conf.mongo;
+            let database = Client::with_uri_str(format!(
+                "mongodb://{}:{}@{}/{}",
+                mongoconf.database_user,
+                mongoconf.database_password,
+                mongoconf.database_url,
+                mongoconf.database_name
+            ))
+            .await;
 
-            tokio::spawn(async move {
-                let db = get_database(ctx1.clone()).await;
-                println!("dbName: {}", db.db.name());
-                loop {
-                    if let Ok(mut cur) = db.weekends.find(doc! {}, None).await {
-                        let wk = filter_weekends(&mut cur).await;
-                        if let Some(weekend) = best_weekend(&wk) {
-                            if let Some(sess) = weekend.next_session() {
-                                println!(
-                                    "Next Session: {} [{}]: {} (in {} minutes)",
-                                    weekend.name,
-                                    sess.r#type,
-                                    sess.start,
-                                    sess.time_from_now().num_minutes()
-                                );
-                            }
-                        } else {
-                            println!("Couldn't find weekends");
-                        }
-                    } else {
-                        println!("Not OK!");
+            if let Err(why) = database {
+                println!("Error connecting to database: {why}");
+                return;
+            }
+            let database = database.unwrap();
+            println!("Connected to mongodb on {}", mongoconf.database_url);
+            let db = database.database(mongoconf.database_name.as_str());
+            let sessions = db.collection::<Weekend>("weekends");
+            let mut last_hash: u64 = 0;
+            loop {
+                let mut hasher = DefaultHasher::new();
+                let wknd = filter_current_weekend(&sessions).await;
+                if let Err(why) = &wknd {
+                    println!("Error finding Weekend: {why}");
+                }
+                let wknd = wknd.unwrap();
+                if let Some(wknd) = wknd {
+                    wknd.hash(&mut hasher);
+                    let h = hasher.finish();
+
+                    if h != last_hash {
+                        last_hash = h;
+                        // Update message here
                     }
-                    tokio::time::sleep(Duration::from_secs(60)).await;
                 }
-            });
 
-            self.is_watcher_running.swap(true, Ordering::Relaxed);
-        }
-
-        if !self.is_deleter_running.load(Ordering::Relaxed) {
-            println!("Deleter service started.");
-            let _ctx1 = Arc::clone(&ctx);
-            tokio::spawn(async move {
-                loop {
-                    tokio::time::sleep(Duration::from_secs(120)).await;
-                }
-            });
-
-            self.is_deleter_running.swap(true, Ordering::Relaxed);
-        }
-
-        if !self.is_permanent_message_running.load(Ordering::Relaxed) {
-            println!("Permanent Message service started.");
-            let _ctx1 = Arc::clone(&ctx);
-            tokio::spawn(async move {
-                loop {
-                    tokio::time::sleep(Duration::from_secs(60 * 5)).await;
-                }
-            });
-
-            self.is_permanent_message_running.swap(true, Ordering::Relaxed);
-        }
+                // Okay, to make sure we don't update the message every minute
+                // we need to hash that little shit.
+                tokio::time::sleep(Duration::from_secs(60)).await;
+            }
+        });
     }
 
     async fn resume(
@@ -161,65 +134,66 @@ impl EventHandler for Bot {
     }
 }
 
+fn generate_default_config() -> Result<()> {
+    let config = Config::default();
+    let str_to_write = toml::to_string_pretty(&config)?;
+    let mut config_file = File::create("./config.toml")?;
+    config_file.write_all(str_to_write.as_bytes())?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
-    if let Err(why) = dotenv() {
-        println!("Couldn't find .env file: {}", why);
-        if env::var("DISCORD_TOKEN").is_err() {
-            println!("Couldn't read DISCORD_TOKEN env variable.");
-            return;
-        }
-        if env::var("MONGO_URL").is_err() {
-            println!("Couldn't read MONGO_URL env variable");
-            return;
+    let config = File::open("./config.toml");
+
+    if let Err(why) = &config {
+        if let io::ErrorKind::NotFound = why.kind() {
+            println!("Generated default config file, please update settings.");
+            if let Err(config_why) = generate_default_config() {
+                println!("Error generating config: {config_why}")
+            }
+        } else {
+            println!("Error reading config file: {why}")
         }
     }
-    let token = env::var("DISCORD_TOKEN").unwrap();
-    let http = Http::new(&token);
-    let database = mongodb::Client::with_uri_str("mongodb://localhost:27017/")
-        .await
-        .expect("Error Creating Mongodb Client");
-    let conn = Arc::new(database.database("f1-notif-bot"));
-    let (owners, _bot_id) = match http.get_current_application_info().await {
-        Ok(info) => {
-            let mut owners = HashSet::new();
-            owners.insert(info.owner.id);
 
-            (owners, info.id)
-        },
-        Err(why) => panic!("Couldn't access application info: {:?}", why),
+    let mut config = config.unwrap();
+    let mut string = "".to_owned();
+    if let Err(why) = config.read_to_string(&mut string) {
+        println!("Error reading config file: {why}");
+        return;
+    }
+    let config = toml::from_str::<Config>(string.as_str());
+    if let Err(why) = &config {
+        println!("Error parsing config file: {why}");
+        return;
+    }
+    let config = config.unwrap();
+    let bot = Bot {
+        is_mainthread_running: AtomicBool::new(false),
+        config: Arc::new(config),
     };
+    let framework = StandardFramework::new();
+    let client = ClientBuilder::new(
+        &bot.config.discord.bot_token,
+        GatewayIntents::non_privileged(),
+    )
+    .framework(framework)
+    .event_handler(bot)
+    .await;
 
-    let framework = StandardFramework::new()
-        .configure(|c| c.owners(owners))
-        .group(&GENERAL_GROUP);
+    if let Err(why) = client {
+        println!("Error creating Discord client: {why}");
+        return;
+    }
 
-    let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::GUILDS;
-    let mut client = Client::builder(token, intents)
-        .event_handler(Bot {
-            is_deleter_running: AtomicBool::new(false),
-            is_permanent_message_running: AtomicBool::new(false),
-            is_watcher_running: AtomicBool::new(false),
-        })
-        .framework(framework)
-        .await
-        .expect("Error creating Client");
-    {
-        let mut data = client.data.write().await;
-        data.insert::<DatabaseHandle>(Arc::new(DbHandle {
-            client: Arc::new(database),
-            db: conn.clone(),
-            messages: Arc::new(conn.collection("messages")),
-            weekends: Arc::new(conn.collection("weekends")),
-            settings: Arc::new(conn.collection("settings")),
-        }));
-        tokio::spawn(async move {
-            tokio::signal::ctrl_c()
-                .await
-                .expect("Couldn't register <ctrl><C> handler");
-        });
+    let mut client = client.unwrap();
+    let run = client.start().await;
+
+    if let Err(why) = run {
+        println!("Error occured while running the client: {why}");
+        return;
     }
-    if let Err(why) = client.start().await {
-        println!("Client Error: {:?}", why);
-    }
+
+    println!("Shutting down.");
 }
