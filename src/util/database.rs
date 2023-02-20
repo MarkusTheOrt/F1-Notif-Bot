@@ -14,10 +14,7 @@ use serde::{
     Deserialize,
     Serialize,
 };
-use serde_with::{
-    serde_as,
-    SerializeAs,
-};
+
 use serenity::futures::StreamExt;
 
 use crate::error::Error;

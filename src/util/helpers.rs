@@ -102,10 +102,26 @@ pub async fn update_persistent_message(
         .http
         .get_message(config.discord.channel, message.discord_id)
         .await?;
-
     internal_message
         .edit(&ctx.http, |edit| edit.content(weekend.to_display()))
         .await?;
 
+    Ok(())
+}
+
+pub async fn create_or_update_persistent_message(
+    notifications: &Collection<BotMessage>,
+    ctx: &Context,
+    config: &Config,
+    weekend: &Weekend,
+) -> Result<(), Error> {
+    let initial_message = get_persistent_message(notifications).await?;
+    if let Some(message) = initial_message {
+        update_persistent_message(&message, ctx, config, weekend).await?;
+    } else {
+        let new_message =
+            create_persistent_message(ctx, config, weekend).await?;
+        notifications.insert_one(new_message, None).await?;
+    }
     Ok(())
 }

@@ -4,7 +4,10 @@ pub mod util;
 
 use error::Result;
 use mongodb::Client;
-use util::database::BotMessageType;
+use util::{
+    database::BotMessageType,
+    helpers::create_or_update_persistent_message,
+};
 
 use std::{
     collections::hash_map::DefaultHasher,
@@ -89,6 +92,7 @@ impl EventHandler for Bot {
         self.is_mainthread_running.swap(true, Ordering::Relaxed);
 
         let conf = self.config.clone();
+
         tokio::spawn(async move {
             println!("Started Watcher thread.");
             let mongoconf = &conf.mongo;
@@ -116,13 +120,13 @@ impl EventHandler for Bot {
                 if let (Ok(None), Some(weekend)) = (&message, weekend) {
                     let res =
                         create_persistent_message(&_ctx, &conf, &weekend).await;
-                    if let Ok(message) = &res {
-                        let test = messages.insert_one(message, None).await;
-                        println!("{test:#?}")
+                    if let Ok(new_message) = &res {
+                        message = Ok(Some(*new_message));
+                        let inserted_message =
+                            messages.insert_one(new_message, None).await;
+                        println!("{inserted_message:#?}")
                     }
                     println!("{res:#?}");
-                } else {
-                    println!("We got a message: {message:#?}")
                 }
 
                 let mut last_hash: u64 = if let Ok(Some(msg)) = message {
@@ -136,7 +140,6 @@ impl EventHandler for Bot {
                 } else {
                     0
                 };
-
                 loop {
                     let mut hasher = DefaultHasher::new();
                     let wknd = filter_current_weekend(&sessions).await;
@@ -148,19 +151,16 @@ impl EventHandler for Bot {
                     if let Some(wknd) = wknd {
                         wknd.hash(&mut hasher);
                         let h = hasher.finish();
-                        if last_hash == 0 {
-                            last_hash = h;
-                        }
                         if h != last_hash {
                             last_hash = h;
-                            let message =
-                                get_persistent_message(&messages).await;
-                            if let Err(why) = &message {
-                                println!("Discord Error: {why}");
-                            }
+                            let error = create_or_update_persistent_message(
+                                &messages, &_ctx, &conf, &wknd,
+                            )
+                            .await;
 
-                            // update_persistent_message(, ctx, config, weekend)
-                            // Update message here
+                            if let Err(why) = error {
+                                println!("Error: {why}");
+                            }
                         }
                     }
                     tokio::time::sleep(Duration::from_secs(60)).await;
