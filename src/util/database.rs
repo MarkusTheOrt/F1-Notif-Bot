@@ -14,6 +14,10 @@ use serde::{
     Deserialize,
     Serialize,
 };
+use serde_with::{
+    serde_as,
+    SerializeAs,
+};
 use serenity::futures::StreamExt;
 
 use crate::error::Error;
@@ -302,13 +306,49 @@ pub struct BotNotification {
 
 #[derive(Debug, Serialize, Deserialize, Hash, Copy, Clone)]
 pub struct BotPersistent {
+    #[serde(with = "string")]
     pub hash: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Hash, Copy, Clone)]
 pub struct BotMessage {
+    #[serde(with = "string")]
     pub discord_id: u64,
     pub kind: BotMessageType,
+}
+
+mod string {
+    use std::{
+        fmt::Display,
+        str::FromStr,
+    };
+
+    use serde::{
+        de,
+        Deserialize,
+        Deserializer,
+        Serializer,
+    };
+
+    pub fn serialize<T, S>(
+        value: &T,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        T: Display,
+        S: Serializer,
+    {
+        serializer.collect_str(value)
+    }
+
+    pub fn deserialize<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+    where
+        T: FromStr,
+        T::Err: Display,
+        D: Deserializer<'de>,
+    {
+        String::deserialize(deserializer)?.parse().map_err(de::Error::custom)
+    }
 }
 
 impl Default for BotMessage {

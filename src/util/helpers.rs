@@ -1,6 +1,15 @@
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{
+        Hash,
+        Hasher,
+    },
+};
+
 use chrono::Utc;
 use mongodb::Collection;
 use serenity::{
+    self,
     futures::StreamExt,
     prelude::Context,
 };
@@ -11,7 +20,11 @@ use crate::{
     util::database::BotMessageType,
 };
 
-use super::database::BotMessage;
+use super::database::{
+    BotMessage,
+    DiscordString,
+    Weekend,
+};
 
 pub async fn get_notifications(
     notifications: &Collection<BotMessage>
@@ -49,6 +62,23 @@ pub async fn delete_persistent_message(
     Ok(())
 }
 
+pub async fn create_persistent_message(
+    ctx: &Context,
+    config: &Config,
+    weekend: &Weekend,
+) -> Result<BotMessage, Error> {
+    let weekend_as_string = weekend.to_display();
+    let channel = ctx.http.get_channel(config.discord.channel).await?;
+
+    let channel = channel.guild().unwrap();
+    let message = channel
+        .send_message(&ctx.http, |msg| msg.content(weekend_as_string))
+        .await?;
+    let mut hasher = DefaultHasher::new();
+    weekend.hash(&mut hasher);
+    Ok(BotMessage::new_persistent(*message.id.as_u64(), hasher.finish()))
+}
+
 pub async fn get_persistent_message(
     notifications: &Collection<BotMessage>
 ) -> Result<Option<BotMessage>, Error> {
@@ -60,4 +90,22 @@ pub async fn get_persistent_message(
         }
     }
     Ok(None)
+}
+
+pub async fn update_persistent_message(
+    message: &BotMessage,
+    ctx: &Context,
+    config: &Config,
+    weekend: &Weekend,
+) -> Result<(), Error> {
+    let mut internal_message = ctx
+        .http
+        .get_message(config.discord.channel, message.discord_id)
+        .await?;
+
+    internal_message
+        .edit(&ctx.http, |edit| edit.content(weekend.to_display()))
+        .await?;
+
+    Ok(())
 }

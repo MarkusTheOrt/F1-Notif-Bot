@@ -4,6 +4,7 @@ pub mod util;
 
 use error::Result;
 use mongodb::Client;
+use util::database::BotMessageType;
 
 use std::{
     collections::hash_map::DefaultHasher,
@@ -39,10 +40,16 @@ use serenity::{
     },
 };
 
-use crate::util::database::{
-    filter_current_weekend,
-    DiscordString,
-    Weekend,
+use crate::util::{
+    database::{
+        filter_current_weekend,
+        BotMessage,
+        Weekend,
+    },
+    helpers::{
+        create_persistent_message,
+        get_persistent_message,
+    },
 };
 
 struct Bot {
@@ -102,28 +109,62 @@ impl EventHandler for Bot {
             println!("Connected to mongodb on {}", mongoconf.database_url);
             let db = database.database(mongoconf.database_name.as_str());
             let sessions = db.collection::<Weekend>("weekends");
-            let mut last_hash: u64 = 0;
-            loop {
-                let mut hasher = DefaultHasher::new();
-                let wknd = filter_current_weekend(&sessions).await;
-                if let Err(why) = &wknd {
-                    println!("Error finding Weekend: {why}");
-                }
-                let wknd = wknd.unwrap();
-                if let Some(wknd) = wknd {
-                    wknd.hash(&mut hasher);
-                    let h = hasher.finish();
-
-                    if h != last_hash {
-                        last_hash = h;
-                        // Update message here
+            let messages = db.collection::<BotMessage>("messages");
+            let mut message = get_persistent_message(&messages).await;
+            let weekend = filter_current_weekend(&sessions).await;
+            if let Ok(weekend) = weekend {
+                if let (Ok(None), Some(weekend)) = (&message, weekend) {
+                    let res =
+                        create_persistent_message(&_ctx, &conf, &weekend).await;
+                    if let Ok(message) = &res {
+                        let test = messages.insert_one(message, None).await;
+                        println!("{test:#?}")
                     }
-                    println!("debugstr: \n{}", wknd.to_display());
+                    println!("{res:#?}");
+                } else {
+                    println!("We got a message: {message:#?}")
                 }
 
-                // Okay, to make sure we don't update the message every minute
-                // we need to hash that little shit.
-                tokio::time::sleep(Duration::from_secs(60)).await;
+                let mut last_hash: u64 = if let Ok(Some(msg)) = message {
+                    if let BotMessageType::Persistent(persistent_message) =
+                        msg.kind
+                    {
+                        persistent_message.hash
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
+
+                loop {
+                    let mut hasher = DefaultHasher::new();
+                    let wknd = filter_current_weekend(&sessions).await;
+                    if let Err(why) = &wknd {
+                        println!("Error finding Weekend: {why}");
+                    }
+                    let wknd = wknd.unwrap();
+
+                    if let Some(wknd) = wknd {
+                        wknd.hash(&mut hasher);
+                        let h = hasher.finish();
+                        if last_hash == 0 {
+                            last_hash = h;
+                        }
+                        if h != last_hash {
+                            last_hash = h;
+                            let message =
+                                get_persistent_message(&messages).await;
+                            if let Err(why) = &message {
+                                println!("Discord Error: {why}");
+                            }
+
+                            // update_persistent_message(, ctx, config, weekend)
+                            // Update message here
+                        }
+                    }
+                    tokio::time::sleep(Duration::from_secs(60)).await;
+                }
             }
         });
     }
