@@ -18,9 +18,11 @@ use std::{
     },
     io::{
         self,
+        stdout,
         Read,
         Write,
     },
+    process::exit,
     sync::{
         atomic::{
             AtomicBool,
@@ -62,24 +64,6 @@ struct Bot {
 
 #[async_trait]
 impl EventHandler for Bot {
-    async fn ready(
-        &self,
-        _ctx: Context,
-        ready: Ready,
-    ) {
-        let user = &ready.user;
-        println!("Client connected as {}#{}", user.name, user.discriminator);
-    }
-
-    async fn message_delete(
-        &self,
-        _ctx: Context,
-        _channel_id: ChannelId,
-        _deleted_message_id: MessageId,
-        _guild_id: Option<GuildId>,
-    ) {
-    }
-
     async fn cache_ready(
         &self,
         _ctx: Context,
@@ -89,15 +73,22 @@ impl EventHandler for Bot {
             return;
         }
 
-        self.is_mainthread_running.swap(true, Ordering::Relaxed);
+        // Make sure we only start the thread if it isn't already running
+        // possibly prevents from any continuances when discord has server
+        // issues.
+        if self.is_mainthread_running.load(Ordering::Relaxed) {
+            return;
+        }
 
         let conf = self.config.clone();
+
+        self.is_mainthread_running.swap(true, Ordering::Relaxed);
 
         tokio::spawn(async move {
             println!("Started Watcher thread.");
             let mongoconf = &conf.mongo;
             let database = Client::with_uri_str(format!(
-                "mongodb://{}:{}@{}/{}",
+                "mongodb://{}:{}@{}/{}?connectTimeoutMS=1000",
                 mongoconf.database_user,
                 mongoconf.database_password,
                 mongoconf.database_url,
@@ -105,15 +96,31 @@ impl EventHandler for Bot {
             ))
             .await;
 
+            // Contrary to believe this isn't actually waiting for a establshed
+            // connection but rather checking if all the options are good.
             if let Err(why) = database {
-                println!("Error connecting to database: {why}");
-                return;
+                println!("Error creating database client: {why}");
+                exit(0x0100);
             }
+
+            // Check if we actually are connected to a database server.
+            print!("Connecting to database... please wait.");
+            stdout().flush().unwrap();
             let database = database.unwrap();
-            println!("Connected to mongodb on {}", mongoconf.database_url);
+            let database_check = database.list_database_names(None, None).await;
+            if let Err(why) = database_check {
+                println!("\rError connecting to database: {why}");
+                exit(0x0100);
+            }
+            println!("\rConnected to mongodb on {}", mongoconf.database_url);
+            // Great, we are now connected!
+
+            // Database setup, get two collections, one for all the weekends and
+            // one for all the messages.
             let db = database.database(mongoconf.database_name.as_str());
             let sessions = db.collection::<Weekend>("weekends");
             let messages = db.collection::<BotMessage>("messages");
+
             let mut message = get_persistent_message(&messages).await;
             let weekend = filter_current_weekend(&sessions).await;
             if let Ok(weekend) = weekend {
@@ -124,9 +131,10 @@ impl EventHandler for Bot {
                         message = Ok(Some(*new_message));
                         let inserted_message =
                             messages.insert_one(new_message, None).await;
-                        println!("{inserted_message:#?}")
+                        if let Err(why) = inserted_message {
+                            println!("Error sending a message: {why}");
+                        }
                     }
-                    println!("{res:#?}");
                 }
 
                 let mut last_hash: u64 = if let Ok(Some(msg)) = message {
@@ -167,6 +175,27 @@ impl EventHandler for Bot {
                 }
             }
         });
+    }
+
+    async fn message_delete(
+        &self,
+        _ctx: Context,
+        _channel_id: ChannelId,
+        _deleted_message_id: MessageId,
+        _guild_id: Option<GuildId>,
+    ) {
+    }
+
+    async fn ready(
+        &self,
+        _ctx: Context,
+        ready: Ready,
+    ) {
+        let user = &ready.user;
+        println!(
+            "Connected to discord as {}#{}",
+            user.name, user.discriminator
+        );
     }
 
     async fn resume(
