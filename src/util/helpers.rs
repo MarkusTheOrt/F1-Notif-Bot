@@ -114,14 +114,15 @@ pub async fn create_or_update_persistent_message(
     ctx: &Context,
     config: &Config,
     weekend: &Weekend,
-) -> Result<(), Error> {
+) -> Result<BotMessage, Error> {
     let initial_message = get_persistent_message(notifications).await?;
     if let Some(message) = initial_message {
         update_persistent_message(&message, ctx, config, weekend).await?;
+        Ok(message)
     } else {
         let new_message =
             create_persistent_message(ctx, config, weekend).await?;
         notifications.insert_one(new_message, None).await?;
+        Ok(new_message)
     }
-    Ok(())
 }

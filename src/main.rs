@@ -51,15 +51,30 @@ use crate::util::{
         BotMessage,
         Weekend,
     },
-    helpers::{
-        create_persistent_message,
-        get_persistent_message,
-    },
+    helpers::get_persistent_message,
 };
 
 struct Bot {
     is_mainthread_running: AtomicBool,
     pub config: Arc<Config>,
+}
+
+#[cfg(debug_assertions)]
+async fn set_presence(ctx: &Context) {
+    ctx.set_presence(
+        Some(Activity::playing("Debug mode.")),
+        OnlineStatus::Online,
+    )
+    .await;
+}
+
+#[cfg(not(debug_assertions))]
+async fn set_presence(ctx: &Context) {
+    ctx.set_presence(
+        Some(Activity::playing("Relase mode.")),
+        OnlineStatus::Online,
+    )
+    .await;
 }
 
 #[async_trait]
@@ -72,7 +87,7 @@ impl EventHandler for Bot {
         if self.is_mainthread_running.load(Ordering::Relaxed) {
             return;
         }
-
+        set_presence(&_ctx).await;
         // Make sure we only start the thread if it isn't already running
         // possibly prevents from any continuances when discord has server
         // issues.
@@ -83,7 +98,6 @@ impl EventHandler for Bot {
         let conf = self.config.clone();
 
         self.is_mainthread_running.swap(true, Ordering::Relaxed);
-
         tokio::spawn(async move {
             println!("Started Watcher thread.");
             let mongoconf = &conf.mongo;
@@ -107,6 +121,8 @@ impl EventHandler for Bot {
             print!("Connecting to database... please wait.");
             stdout().flush().unwrap();
             let database = database.unwrap();
+            // by listing database names we actually have to await a server
+            // connection.
             let database_check = database.list_database_names(None, None).await;
             if let Err(why) = database_check {
                 println!("\rError connecting to database: {why}");
@@ -125,15 +141,14 @@ impl EventHandler for Bot {
             let weekend = filter_current_weekend(&sessions).await;
             if let Ok(weekend) = weekend {
                 if let (Ok(None), Some(weekend)) = (&message, weekend) {
-                    let res =
-                        create_persistent_message(&_ctx, &conf, &weekend).await;
-                    if let Ok(new_message) = &res {
-                        message = Ok(Some(*new_message));
-                        let inserted_message =
-                            messages.insert_one(new_message, None).await;
-                        if let Err(why) = inserted_message {
-                            println!("Error sending a message: {why}");
-                        }
+                    let res = create_or_update_persistent_message(
+                        &messages, &_ctx, &conf, &weekend,
+                    )
+                    .await;
+                    if let Err(why) = &res {
+                        println!("Error sending or updating message: {why}");
+                    } else if let Ok(new_or_updated_mesasge) = res {
+                        message = Ok(Some(new_or_updated_mesasge));
                     }
                 }
 
@@ -149,20 +164,23 @@ impl EventHandler for Bot {
                     0
                 };
                 loop {
+                    // We wait for the first time in the loop to make continues
+                    // easier.
+                    tokio::time::sleep(Duration::from_secs(60)).await;
                     let mut hasher = DefaultHasher::new();
-                    let wknd = filter_current_weekend(&sessions).await;
-                    if let Err(why) = &wknd {
+                    let weekend = filter_current_weekend(&sessions).await;
+                    if let Err(why) = &weekend {
                         println!("Error finding Weekend: {why}");
+                        continue;
                     }
-                    let wknd = wknd.unwrap();
 
-                    if let Some(wknd) = wknd {
-                        wknd.hash(&mut hasher);
+                    if let Ok(Some(weekend)) = weekend {
+                        weekend.hash(&mut hasher);
                         let h = hasher.finish();
                         if h != last_hash {
                             last_hash = h;
                             let error = create_or_update_persistent_message(
-                                &messages, &_ctx, &conf, &wknd,
+                                &messages, &_ctx, &conf, &weekend,
                             )
                             .await;
 
@@ -171,7 +189,6 @@ impl EventHandler for Bot {
                             }
                         }
                     }
-                    tokio::time::sleep(Duration::from_secs(60)).await;
                 }
             }
         });

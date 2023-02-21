@@ -118,27 +118,37 @@ impl DiscordString for SessionType {
             SessionType::Test(sess) => (
                 "Testing session:".to_owned(),
                 sess.time.timestamp(),
-                sess.notified,
+                sess.notified
+                    || sess.time.signed_duration_since(Utc::now())
+                        < -sess.get_duration(),
             ),
             SessionType::Practice(sess) => (
                 format!("FP{}:       ", sess.number),
                 sess.time.timestamp(),
-                sess.notified,
+                sess.notified
+                    || sess.time.signed_duration_since(Utc::now())
+                        < -sess.get_duration(),
             ),
             SessionType::Qualifying(sess) => (
                 "Qualifying: ".to_owned(),
                 sess.time.timestamp(),
-                sess.notified,
+                sess.notified
+                    || sess.time.signed_duration_since(Utc::now())
+                        < -sess.get_duration(),
             ),
             SessionType::Sprint(sess) => (
                 "Sprint Race:".to_owned(),
                 sess.time.timestamp(),
-                sess.notified,
+                sess.notified
+                    || sess.time.signed_duration_since(Utc::now())
+                        < -sess.get_duration(),
             ),
             SessionType::Race(sess) => (
                 "Race:       ".to_owned(),
                 sess.time.timestamp(),
-                sess.notified,
+                sess.notified
+                    || sess.time.signed_duration_since(Utc::now())
+                        < -sess.get_duration(),
             ),
         };
 
