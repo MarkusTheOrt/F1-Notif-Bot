@@ -41,6 +41,19 @@ pub enum SessionType {
     Race(Race),
 }
 
+impl SessionType {
+    pub fn is_notified(&self) -> bool {
+        match self {
+            SessionType::None => true,
+            SessionType::Test(sess) => sess.notified,
+            SessionType::Practice(sess) => sess.notified,
+            SessionType::Qualifying(sess) => sess.notified,
+            SessionType::Sprint(sess) => sess.notified,
+            SessionType::Race(sess) => sess.notified,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash)]
 pub struct Race {
     pub time: DateTime<Utc>,
@@ -232,7 +245,6 @@ impl Sessions for Race {
     }
 }
 
-#[allow(clippy::needless_return)]
 pub async fn filter_current_weekend(
     weekends: &Collection<Weekend>
 ) -> Result<Option<Weekend>, Error> {
@@ -246,15 +258,15 @@ pub async fn filter_current_weekend(
         }
         // Discard any dates older than 4 days, no weekend will make sense at
         // that point.
-        if doc.start.signed_duration_since(Utc::now()).num_days() < -4 {
+        if Utc::now().signed_duration_since(doc.start).num_days() > 4 {
             continue;
         }
 
         best_start = if best_start.is_none()
-            || best_start.unwrap() < doc.start - Utc::now()
+            || best_start.unwrap() < Utc::now().signed_duration_since(doc.start)
         {
             best_doc = Some(doc.clone());
-            Some(doc.start - Utc::now())
+            Some(Utc::now().signed_duration_since(doc.start))
         } else {
             best_start
         }
@@ -275,6 +287,27 @@ impl SessionType {
             },
         }
     }
+
+    pub fn time_until(&self) -> Option<i64> {
+        match self {
+            SessionType::None => None,
+            SessionType::Test(sess) => {
+                Some(Utc::now().signed_duration_since(sess.time).num_minutes())
+            },
+            SessionType::Practice(sess) => {
+                Some(Utc::now().signed_duration_since(sess.time).num_minutes())
+            },
+            SessionType::Qualifying(sess) => {
+                Some(Utc::now().signed_duration_since(sess.time).num_minutes())
+            },
+            SessionType::Sprint(sess) => {
+                Some(Utc::now().signed_duration_since(sess.time).num_minutes())
+            },
+            SessionType::Race(sess) => {
+                Some(Utc::now().signed_duration_since(sess.time).num_minutes())
+            },
+        }
+    }
 }
 
 impl Weekend {
@@ -282,19 +315,25 @@ impl Weekend {
         let mut best_match = None;
         let mut best_time = None;
         for (_, sess) in self.sessions.iter().enumerate() {
-            best_time = if sess.get_duration().is_none()
-                || sess.get_duration().unwrap().num_minutes().abs()
-                    < best_time.unwrap()
+            if sess.is_notified() {
+                continue;
+            }
+            if sess.time_until().is_none() {
+                continue;
+            }
+
+            (best_match, best_time) = if sess.time_until().unwrap() < 6
+                || sess.time_until().unwrap() < best_time.unwrap()
             {
-                best_match = Some(sess.to_owned());
-                Some(sess.get_duration().unwrap().num_minutes().abs())
+                (Some(sess), sess.time_until())
             } else {
-                best_time
+                (best_match, best_time)
             }
         }
+
         match best_match {
+            Some(sess) => *sess,
             None => SessionType::None,
-            _ => best_match.unwrap(),
         }
     }
 }

@@ -88,12 +88,6 @@ impl EventHandler for Bot {
             return;
         }
         set_presence(&_ctx).await;
-        // Make sure we only start the thread if it isn't already running
-        // possibly prevents from any continuances when discord has server
-        // issues.
-        if self.is_mainthread_running.load(Ordering::Relaxed) {
-            return;
-        }
 
         let conf = self.config.clone();
 
@@ -166,7 +160,7 @@ impl EventHandler for Bot {
                 loop {
                     // We wait for the first time in the loop to make continues
                     // easier.
-                    tokio::time::sleep(Duration::from_secs(60)).await;
+                    tokio::time::sleep(Duration::from_secs(5)).await;
                     let mut hasher = DefaultHasher::new();
                     let weekend = filter_current_weekend(&sessions).await;
                     if let Err(why) = &weekend {
@@ -177,6 +171,7 @@ impl EventHandler for Bot {
                     if let Ok(Some(weekend)) = weekend {
                         weekend.hash(&mut hasher);
                         let h = hasher.finish();
+                        println!("Session: {:#?}", weekend.get_next_session());
                         if h != last_hash {
                             last_hash = h;
                             let error = create_or_update_persistent_message(
