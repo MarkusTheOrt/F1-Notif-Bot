@@ -14,6 +14,7 @@ pub struct Discord {
     pub bot_token: String,
     pub guild: u64,
     pub channel: u64,
+    pub role: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -30,6 +31,7 @@ impl Default for Discord {
             bot_token: "DISCORD_BOT_TOKEN".to_owned(),
             guild: 883847530687913995,
             channel: 1002285400095719524,
+            role: 1033311726889861244,
         }
     }
 }

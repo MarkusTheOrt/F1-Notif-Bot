@@ -7,7 +7,10 @@ use chrono::{
     Utc,
 };
 use mongodb::{
-    bson::doc,
+    bson::{
+        doc,
+        oid::ObjectId,
+    },
     Collection,
 };
 use serde::{
@@ -21,6 +24,8 @@ use crate::error::Error;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Hash)]
 pub struct Weekend {
+    #[serde(rename = "_id")]
+    pub id: ObjectId,
     pub name: String,
     pub start: DateTime<Utc>,
     pub sessions: Vec<SessionType>,
@@ -50,6 +55,28 @@ impl SessionType {
             SessionType::Qualifying(sess) => sess.notified,
             SessionType::Sprint(sess) => sess.notified,
             SessionType::Race(sess) => sess.notified,
+        }
+    }
+
+    pub fn set_modified(&mut self) {
+        match self {
+            SessionType::None => {},
+            SessionType::Test(sess) => sess.notified = true,
+            SessionType::Practice(sess) => sess.notified = true,
+            SessionType::Qualifying(sess) => sess.notified = true,
+            SessionType::Sprint(sess) => sess.notified = true,
+            SessionType::Race(sess) => sess.notified = true,
+        }
+    }
+
+    pub fn short_name(&self) -> String {
+        match self {
+            SessionType::None => "Unsupported (WTF) session".to_owned(),
+            SessionType::Test(_) => "Test session".to_owned(),
+            SessionType::Practice(sess) => format!("FP{}", sess.number),
+            SessionType::Qualifying(_) => "Qualifying".to_owned(),
+            SessionType::Sprint(_) => "Sprint Race".to_owned(),
+            SessionType::Race(_) => "Race".to_owned(),
         }
     }
 }
@@ -131,37 +158,32 @@ impl DiscordString for SessionType {
             SessionType::Test(sess) => (
                 "Testing session:".to_owned(),
                 sess.time.timestamp(),
-                sess.notified
-                    || sess.time.signed_duration_since(Utc::now())
-                        < -sess.get_duration(),
+                sess.time.signed_duration_since(Utc::now())
+                    < -sess.get_duration(),
             ),
             SessionType::Practice(sess) => (
                 format!("FP{}:       ", sess.number),
                 sess.time.timestamp(),
-                sess.notified
-                    || sess.time.signed_duration_since(Utc::now())
-                        < -sess.get_duration(),
+                sess.time.signed_duration_since(Utc::now())
+                    < -sess.get_duration(),
             ),
             SessionType::Qualifying(sess) => (
-                "Qualifying: ".to_owned(),
+                "Qualifying:".to_owned(),
                 sess.time.timestamp(),
-                sess.notified
-                    || sess.time.signed_duration_since(Utc::now())
-                        < -sess.get_duration(),
+                sess.time.signed_duration_since(Utc::now())
+                    < -sess.get_duration(),
             ),
             SessionType::Sprint(sess) => (
                 "Sprint Race:".to_owned(),
                 sess.time.timestamp(),
-                sess.notified
-                    || sess.time.signed_duration_since(Utc::now())
-                        < -sess.get_duration(),
+                sess.time.signed_duration_since(Utc::now())
+                    < -sess.get_duration(),
             ),
             SessionType::Race(sess) => (
-                "Race:       ".to_owned(),
+                "Race:      ".to_owned(),
                 sess.time.timestamp(),
-                sess.notified
-                    || sess.time.signed_duration_since(Utc::now())
-                        < -sess.get_duration(),
+                sess.time.signed_duration_since(Utc::now())
+                    < -sess.get_duration(),
             ),
         };
 
@@ -181,7 +203,7 @@ impl DiscordString for Weekend {
         for (_, sess) in self.sessions.iter().enumerate() {
             content += sess.to_display().as_str();
         }
-        content += "\n\n\nClick :mega: in <#913752470293991424> to get a notification when a session is live.";
+        content += "\n\n\nClick :mega: in <#913752470293991424> or use <id:customize> to get a notification when a session is live.";
         content
     }
 }
@@ -310,31 +332,50 @@ impl SessionType {
     }
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum WeekendState {
+    None,
+    FutureSession,
+    CurrentSession(usize, SessionType),
+}
+
 impl Weekend {
-    pub fn get_next_session(&self) -> SessionType {
-        let mut best_match = None;
+    pub fn get_next_session(&mut self) -> WeekendState {
+        let mut value = WeekendState::None;
+
         let mut best_time = None;
-        for (_, sess) in self.sessions.iter().enumerate() {
+
+        for (i, sess) in self.sessions.iter().enumerate() {
             if sess.is_notified() {
                 continue;
             }
+
             if sess.time_until().is_none() {
                 continue;
             }
+            let time_until = &sess.time_until().unwrap();
 
-            (best_match, best_time) = if sess.time_until().unwrap() < 6
-                || sess.time_until().unwrap() < best_time.unwrap()
-            {
-                (Some(sess), sess.time_until())
-            } else {
-                (best_match, best_time)
+            // Lets mark this weekend as (at least) future session so we don't
+            // skip it in the future in case there is a next session another
+            // day.
+            if let WeekendState::None = value {
+                if *time_until < -6 {
+                    value = WeekendState::FutureSession
+                }
+            }
+
+            (value, best_time) = match time_until {
+                -6..=0 => {
+                    (WeekendState::CurrentSession(i, *sess), sess.time_until())
+                },
+                _ => (value, best_time),
             }
         }
-
-        match best_match {
-            Some(sess) => *sess,
-            None => SessionType::None,
-        }
+        value
+        // match best_match {
+        //     Some(sess) => (best_index, sess),
+        //     None => (None, &SessionType::None),
+        // }
     }
 }
 
@@ -358,6 +399,8 @@ pub struct BotPersistent {
 
 #[derive(Debug, Serialize, Deserialize, Hash, Copy, Clone)]
 pub struct BotMessage {
+    #[serde(rename = "_id")]
+    pub id: ObjectId,
     #[serde(with = "string")]
     pub discord_id: u64,
     pub kind: BotMessageType,
@@ -400,6 +443,7 @@ mod string {
 impl Default for BotMessage {
     fn default() -> Self {
         Self {
+            id: ObjectId::new(),
             discord_id: 0,
             kind: BotMessageType::None,
         }
@@ -420,6 +464,7 @@ impl BotMessage {
         kind: BotMessageType,
     ) -> Self {
         Self {
+            id: ObjectId::new(),
             discord_id: id,
             kind,
         }
@@ -427,6 +472,7 @@ impl BotMessage {
 
     pub fn new_notification(id: u64) -> Self {
         Self {
+            id: ObjectId::new(),
             discord_id: id,
             kind: BotMessageType::Notification(BotNotification {
                 time_sent: Utc::now(),
@@ -439,6 +485,7 @@ impl BotMessage {
         hash: u64,
     ) -> Self {
         Self {
+            id: ObjectId::new(),
             discord_id: id,
             kind: BotMessageType::Persistent(BotPersistent {
                 hash,

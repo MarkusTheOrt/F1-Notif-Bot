@@ -2,10 +2,22 @@ pub mod config;
 pub mod error;
 pub mod util;
 
-use error::Result;
-use mongodb::Client;
+use error::{
+    Error,
+    Result,
+};
+use mongodb::{
+    bson::{
+        self,
+        doc,
+    },
+    Client,
+};
 use util::{
-    database::BotMessageType,
+    database::{
+        BotMessageType,
+        WeekendState,
+    },
     helpers::create_or_update_persistent_message,
 };
 
@@ -38,6 +50,7 @@ use serenity::{
     async_trait,
     client::ClientBuilder,
     framework::StandardFramework,
+    futures::StreamExt,
     model::prelude::*,
     prelude::{
         Context,
@@ -51,7 +64,11 @@ use crate::util::{
         BotMessage,
         Weekend,
     },
-    helpers::get_persistent_message,
+    helpers::{
+        delete_notification,
+        get_persistent_message,
+        notify_session,
+    },
 };
 
 struct Bot {
@@ -69,13 +86,7 @@ async fn set_presence(ctx: &Context) {
 }
 
 #[cfg(not(debug_assertions))]
-async fn set_presence(ctx: &Context) {
-    ctx.set_presence(
-        Some(Activity::playing("Relase mode.")),
-        OnlineStatus::Online,
-    )
-    .await;
-}
+async fn set_presence(ctx: &Context) {}
 
 #[async_trait]
 impl EventHandler for Bot {
@@ -141,6 +152,13 @@ impl EventHandler for Bot {
                     .await;
                     if let Err(why) = &res {
                         println!("Error sending or updating message: {why}");
+
+                        if let Error::Serenity(serenity::Error::Http(why)) = why
+                        {
+                            if let serenity::http::HttpError::UnsuccessfulRequest(why) = why.as_ref() {
+                                println!("{}", why.error.code);
+                            }
+                        }
                     } else if let Ok(new_or_updated_mesasge) = res {
                         message = Ok(Some(new_or_updated_mesasge));
                     }
@@ -168,20 +186,79 @@ impl EventHandler for Bot {
                         continue;
                     }
 
-                    if let Ok(Some(weekend)) = weekend {
+                    if let Ok(Some(mut weekend)) = weekend {
                         weekend.hash(&mut hasher);
                         let h = hasher.finish();
-                        println!("Session: {:#?}", weekend.get_next_session());
+                        let sess = weekend.get_next_session();
+
+                        if let WeekendState::CurrentSession(index, _session) =
+                            sess
+                        {
+                            if let Some(sess) = weekend.sessions.get_mut(index)
+                            {
+                                sess.set_modified();
+                                let update = bson::to_bson(&weekend);
+                                if let Ok(doc) = update {
+                                    let _ = sessions
+                                        .update_one(
+                                            doc! { "_id": weekend.id },
+                                            doc! { "$set": doc },
+                                            None,
+                                        )
+                                        .await;
+                                    let res = notify_session(
+                                        &_ctx, &conf, &_session, &weekend,
+                                    )
+                                    .await;
+                                    if let Ok(Some(new_message)) = res {
+                                        let _ = messages
+                                            .insert_one(new_message, None)
+                                            .await;
+                                    }
+                                }
+                                // now post the f-ing thing.
+                            }
+                        } else if let WeekendState::None = sess {
+                            weekend.done = true;
+                            let update = bson::to_bson(&weekend);
+                            if let Ok(doc) = update {
+                                let _ = sessions
+                                    .update_one(
+                                        doc! { "_id": weekend.id },
+                                        doc! { "$set": doc },
+                                        None,
+                                    )
+                                    .await;
+                            }
+                        }
+
                         if h != last_hash {
                             last_hash = h;
                             let error = create_or_update_persistent_message(
                                 &messages, &_ctx, &conf, &weekend,
                             )
                             .await;
-
-                            if let Err(why) = error {
-                                println!("Error: {why}");
+                            if error.is_err() {
+                                println!("message does not exist");
+                                exit(0x0100);
                             }
+                        }
+                    }
+                    let messages_to_delete = messages.find(None, None).await;
+                    if let Err(why) = messages_to_delete {
+                        println!("Error getting messages to delete: {why}");
+                        continue;
+                    }
+                    let mut messages_to_delete = messages_to_delete.unwrap();
+                    while let Some(Ok(message)) =
+                        messages_to_delete.next().await
+                    {
+                        let res = delete_notification(
+                            &_ctx, &conf, &message, &messages,
+                        )
+                        .await;
+                        if let Err(why) = res {
+                            println!("Error removing msgs: {why}");
                         }
                     }
                 }

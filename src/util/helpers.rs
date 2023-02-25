@@ -7,7 +7,10 @@ use std::{
 };
 
 use chrono::Utc;
-use mongodb::Collection;
+use mongodb::{
+    bson::doc,
+    Collection,
+};
 use serenity::{
     self,
     futures::StreamExt,
@@ -23,6 +26,7 @@ use crate::{
 use super::database::{
     BotMessage,
     DiscordString,
+    SessionType,
     Weekend,
 };
 
@@ -102,10 +106,59 @@ pub async fn update_persistent_message(
         .http
         .get_message(config.discord.channel, message.discord_id)
         .await?;
+
     internal_message
         .edit(&ctx.http, |edit| edit.content(weekend.to_display()))
         .await?;
 
+    Ok(())
+}
+
+pub async fn notify_session(
+    ctx: &Context,
+    config: &Config,
+    session: &SessionType,
+    weekend: &Weekend,
+) -> Result<Option<BotMessage>, Error> {
+    let channel = ctx.http.get_channel(config.discord.channel).await?;
+    if let Some(channel) = channel.guild() {
+        let msg = channel
+            .send_message(&ctx, |new_message| {
+                new_message.content(format!(
+                    "**<@&{}> -- {} {} just started!**",
+                    config.discord.role,
+                    weekend.name,
+                    session.short_name()
+                ))
+            })
+            .await?;
+        return Ok(Some(BotMessage::new_notification(msg.id.into())));
+    }
+    Ok(None)
+}
+
+pub async fn delete_notification(
+    ctx: &Context,
+    config: &Config,
+    message: &BotMessage,
+    messages: &Collection<BotMessage>,
+) -> Result<(), Error> {
+    if let BotMessageType::Notification(notification) = &message.kind {
+        if Utc::now()
+            .signed_duration_since(notification.time_sent)
+            .num_minutes()
+            < 30
+        {
+            return Ok(());
+        }
+
+        let msg = ctx
+            .http
+            .get_message(config.discord.channel, message.discord_id)
+            .await?;
+        msg.delete(ctx).await?;
+        messages.delete_one(doc! { "_id": message.id }, None).await?;
+    }
     Ok(())
 }
 
