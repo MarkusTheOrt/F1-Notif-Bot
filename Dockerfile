@@ -3,9 +3,8 @@ FROM rust:1.67.1 as build-stage
 WORKDIR /app
 
 COPY . .
-RUN apt-get install libc6-dev
 
-RUN cargo install --path .
+RUN cargo install --path --release .
 
 FROM debian:buster-slim as runner
 
