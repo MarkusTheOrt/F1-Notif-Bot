@@ -5,7 +5,7 @@ WORKDIR /app
 COPY . .
 RUN apt-get install libc6-dev
 
-RUN RUSTFLAGS="-C target-feature=+crt-static" cargo install --path .
+RUN cargo install --path .
 
 FROM debian:buster-slim as runner
 
