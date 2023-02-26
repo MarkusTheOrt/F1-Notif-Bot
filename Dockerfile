@@ -3,8 +3,9 @@ FROM rust:1.67.1 as build-stage
 WORKDIR /app
 
 COPY . .
+RUN apt-get install libc6-dev
 
-RUN cargo install --path .
+RUN RUSTFLAGS="-C target-feature=+crt-static" cargo install --path .
 
 FROM debian:buster-slim as runner
 
