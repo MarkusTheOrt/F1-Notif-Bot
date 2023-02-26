@@ -274,7 +274,7 @@ fn generate_default_config() -> Result<()> {
 
 #[tokio::main]
 async fn main() {
-    let config = File::open(".config/config.toml");
+    let config = File::open("/config/config.toml");
 
     if let Err(why) = &config {
         if let io::ErrorKind::NotFound = why.kind() {
