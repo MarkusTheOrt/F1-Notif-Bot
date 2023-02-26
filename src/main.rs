@@ -267,7 +267,7 @@ impl EventHandler for Bot {
 fn generate_default_config() -> Result<()> {
     let config = Config::default();
     let str_to_write = toml::to_string_pretty(&config)?;
-    let mut config_file = File::create("./config.toml")?;
+    let mut config_file = File::create("/config/config.toml")?;
     config_file.write_all(str_to_write.as_bytes())?;
     Ok(())
 }
