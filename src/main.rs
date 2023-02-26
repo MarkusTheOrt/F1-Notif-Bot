@@ -76,11 +76,13 @@ impl EventHandler for Bot {
             println!("Started Watcher thread.");
             let mongoconf = &conf.mongo;
             let database = Client::with_uri_str(format!(
-                "mongodb+srv://{}:{}@{}/{}?connectTimeoutMS=1000",
+                "{}://{}:{}@{}/{}{}",
+                mongoconf.protocol,
                 mongoconf.user,
                 mongoconf.password,
                 mongoconf.url,
-                mongoconf.database
+                mongoconf.database,
+                mongoconf.suffix
             ))
             .await;
 

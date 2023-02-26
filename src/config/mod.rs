@@ -20,6 +20,8 @@ pub struct Mongo {
     pub user: String,
     pub password: String,
     pub database: String,
+    pub protocol: String,
+    pub suffix: String,
 }
 
 impl Default for Discord {
@@ -40,6 +42,8 @@ impl Default for Mongo {
             user: "notificationsbot".to_owned(),
             password: "YOUR_PASSWORD".to_owned(),
             database: "notifbot".to_owned(),
+            protocol: "mongodb".to_owned(),
+            suffix: "".to_owned(),
         }
     }
 }
