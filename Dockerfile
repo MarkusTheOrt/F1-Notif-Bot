@@ -4,8 +4,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN rustup toolchain install nightly
-RUN cargo +nightly install --path .
+RUN cargo install --path .
 
 FROM debian:buster-slim
 
