@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN cargo install --path --release .
+RUN cargo install --release --path .
 
 FROM debian:buster-slim as runner
 
