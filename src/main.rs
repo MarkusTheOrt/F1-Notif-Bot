@@ -94,17 +94,17 @@ impl EventHandler for Bot {
             }
 
             // Check if we actually are connected to a database server.
-            print!("Connecting to database... please wait.");
-            stdout().flush().unwrap();
+            println!("Connecting to database... please wait.");
+
             let database = database.unwrap();
             // by listing database names we actually have to await a server
             // connection.
             let database_check = database.list_database_names(None, None).await;
             if let Err(why) = database_check {
-                println!("\rError connecting to database: {why}");
+                println!("Error connecting to database: {why}");
                 exit(0x0100);
             }
-            println!("\rConnected to mongodb on {}", mongoconf.database);
+            println!("Connected to mongodb on {}", mongoconf.database);
             // Great, we are now connected!
 
             // Database setup, get two collections, one for all the weekends and
@@ -276,7 +276,7 @@ fn generate_default_config() -> Result<()> {
 
 #[tokio::main]
 async fn main() {
-    let config = File::open("/config/config.toml");
+    let config = File::open("./config/config.toml");
 
     if let Err(why) = &config {
         if let io::ErrorKind::NotFound = why.kind() {
