@@ -2,44 +2,24 @@ pub mod config;
 pub mod error;
 pub mod util;
 
-use error::{
-    Error,
-    Result,
-};
+use error::{Error, Result};
 use mongodb::{
-    bson::{
-        self,
-        doc,
-    },
+    bson::{self, doc},
     Client,
 };
 use util::{
-    database::{
-        BotMessageType,
-        WeekendState,
-    },
+    database::{BotMessageType, WeekendState},
     helpers::create_or_update_persistent_message,
 };
 
 use std::{
     collections::hash_map::DefaultHasher,
     fs::File,
-    hash::{
-        Hash,
-        Hasher,
-    },
-    io::{
-        self,
-        stdout,
-        Read,
-        Write,
-    },
+    hash::{Hash, Hasher},
+    io::{self, stdout, Read, Write},
     process::exit,
     sync::{
-        atomic::{
-            AtomicBool,
-            Ordering,
-        },
+        atomic::{AtomicBool, Ordering},
         Arc,
     },
     time::Duration,
@@ -52,23 +32,12 @@ use serenity::{
     framework::StandardFramework,
     futures::StreamExt,
     model::prelude::*,
-    prelude::{
-        Context,
-        EventHandler,
-    },
+    prelude::{Context, EventHandler},
 };
 
 use crate::util::{
-    database::{
-        filter_current_weekend,
-        BotMessage,
-        Weekend,
-    },
-    helpers::{
-        delete_notification,
-        get_persistent_message,
-        notify_session,
-    },
+    database::{filter_current_weekend, BotMessage, Weekend},
+    helpers::{delete_notification, get_persistent_message, notify_session},
 };
 
 struct Bot {
@@ -305,7 +274,7 @@ fn generate_default_config() -> Result<()> {
 
 #[tokio::main]
 async fn main() {
-    let config = File::open("./config.toml");
+    let config = File::open(".config/config.toml");
 
     if let Err(why) = &config {
         if let io::ErrorKind::NotFound = why.kind() {
