@@ -16,7 +16,7 @@ use std::{
     collections::hash_map::DefaultHasher,
     fs::File,
     hash::{Hash, Hasher},
-    io::{self, stdout, Read, Write},
+    io::{self, Read, Write},
     process::exit,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -92,11 +92,10 @@ impl EventHandler for Bot {
                 println!("Error creating database client: {why}");
                 exit(0x0100);
             }
-
+            let database = database.unwrap();
             // Check if we actually are connected to a database server.
             println!("Connecting to database... please wait.");
 
-            let database = database.unwrap();
             // by listing database names we actually have to await a server
             // connection.
             let database_check = database.list_database_names(None, None).await;
