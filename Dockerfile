@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --path = .
+RUN RUSTFLAGS="-C target-feature=+crt-static" cargo install --target x86_64-unknown-linux-gnu --path .
 
 FROM debian:buster-slim as runner
 
