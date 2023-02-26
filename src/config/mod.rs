@@ -1,7 +1,4 @@
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct Config {
@@ -19,10 +16,10 @@ pub struct Discord {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Mongo {
-    pub database_url: String,
-    pub database_user: String,
-    pub database_password: String,
-    pub database_name: String,
+    pub url: String,
+    pub user: String,
+    pub password: String,
+    pub database: String,
 }
 
 impl Default for Discord {
@@ -39,10 +36,10 @@ impl Default for Discord {
 impl Default for Mongo {
     fn default() -> Self {
         Self {
-            database_url: "localhost:27017".to_owned(),
-            database_user: "notificationsbot".to_owned(),
-            database_password: "YOUR_PASSWORD".to_owned(),
-            database_name: "notifbot".to_owned(),
+            url: "localhost:27017".to_owned(),
+            user: "notificationsbot".to_owned(),
+            password: "YOUR_PASSWORD".to_owned(),
+            database: "notifbot".to_owned(),
         }
     }
 }

@@ -76,11 +76,11 @@ impl EventHandler for Bot {
             println!("Started Watcher thread.");
             let mongoconf = &conf.mongo;
             let database = Client::with_uri_str(format!(
-                "mongodb://{}:{}@{}/{}?connectTimeoutMS=1000",
-                mongoconf.database_user,
-                mongoconf.database_password,
-                mongoconf.database_url,
-                mongoconf.database_name
+                "mongodb+srv://{}:{}@{}/{}?connectTimeoutMS=1000",
+                mongoconf.user,
+                mongoconf.password,
+                mongoconf.url,
+                mongoconf.database
             ))
             .await;
 
@@ -102,12 +102,12 @@ impl EventHandler for Bot {
                 println!("\rError connecting to database: {why}");
                 exit(0x0100);
             }
-            println!("\rConnected to mongodb on {}", mongoconf.database_url);
+            println!("\rConnected to mongodb on {}", mongoconf.database);
             // Great, we are now connected!
 
             // Database setup, get two collections, one for all the weekends and
             // one for all the messages.
-            let db = database.database(mongoconf.database_name.as_str());
+            let db = database.database(mongoconf.database.as_str());
             let sessions = db.collection::<Weekend>("weekends");
             let messages = db.collection::<BotMessage>("messages");
 
