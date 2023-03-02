@@ -145,7 +145,12 @@ impl DiscordString for PracticeSession {
 impl DiscordString for SessionType {
     fn to_display(&self) -> String {
         let (name, timestamp, strikethrough) = match self {
-            SessionType::None => ("Unsupported:".to_owned(), 0, false),
+            SessionType::None => (
+                "Error (unkown session type)` <@142951266811641856> `Please fix."
+                    .to_owned(),
+                0,
+                false,
+            ),
             SessionType::Test(sess) => (
                 "Testing session:".to_owned(),
                 sess.time.timestamp(),
@@ -153,13 +158,13 @@ impl DiscordString for SessionType {
                     < -sess.get_duration(),
             ),
             SessionType::Practice(sess) => (
-                format!("FP{}:       ", sess.number),
+                format!("FP{}:        ", sess.number),
                 sess.time.timestamp(),
                 sess.time.signed_duration_since(Utc::now())
                     < -sess.get_duration(),
             ),
             SessionType::Qualifying(sess) => (
-                "Qualifying:".to_owned(),
+                "Qualifying: ".to_owned(),
                 sess.time.timestamp(),
                 sess.time.signed_duration_since(Utc::now())
                     < -sess.get_duration(),
@@ -171,7 +176,7 @@ impl DiscordString for SessionType {
                     < -sess.get_duration(),
             ),
             SessionType::Race(sess) => (
-                "Race:      ".to_owned(),
+                "Race:       ".to_owned(),
                 sess.time.timestamp(),
                 sess.time.signed_duration_since(Utc::now())
                     < -sess.get_duration(),
@@ -236,25 +241,25 @@ pub trait Sessions {
 
 impl Sessions for PracticeSession {
     fn get_duration(&self) -> chrono::Duration {
-        self.time - Utc::now()
+        chrono::Duration::from_std(self.duration).unwrap()
     }
 }
 
 impl Sessions for TestSession {
     fn get_duration(&self) -> chrono::Duration {
-        self.time - Utc::now()
+        chrono::Duration::minutes(0)
     }
 }
 
 impl Sessions for Qualifying {
     fn get_duration(&self) -> chrono::Duration {
-        self.time - Utc::now()
+        chrono::Duration::from_std(self.duration).unwrap()
     }
 }
 
 impl Sessions for Race {
     fn get_duration(&self) -> chrono::Duration {
-        self.time - Utc::now()
+        chrono::Duration::from_std(self.duration).unwrap()
     }
 }
 

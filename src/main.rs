@@ -37,7 +37,10 @@ use serenity::{
 
 use crate::util::{
     database::{filter_current_weekend, BotMessage, Weekend},
-    helpers::{delete_notification, get_persistent_message, notify_session},
+    helpers::{
+        delete_notification, get_persistent_message, notify_session,
+        remove_all_reactions,
+    },
 };
 
 struct Bot {
@@ -199,6 +202,10 @@ impl EventHandler for Bot {
                                         None,
                                     )
                                     .await;
+                                let _ = remove_all_reactions(
+                                    &messages, &_ctx, &conf,
+                                )
+                                .await;
                             }
                         }
 
@@ -208,6 +215,7 @@ impl EventHandler for Bot {
                                 &messages, &_ctx, &conf, &weekend,
                             )
                             .await;
+
                             if error.is_err() {
                                 println!("message does not exist");
                                 exit(0x0100);

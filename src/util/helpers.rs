@@ -1,34 +1,15 @@
 use std::{
     collections::hash_map::DefaultHasher,
-    hash::{
-        Hash,
-        Hasher,
-    },
+    hash::{Hash, Hasher},
 };
 
 use chrono::Utc;
-use mongodb::{
-    bson::doc,
-    Collection,
-};
-use serenity::{
-    self,
-    futures::StreamExt,
-    prelude::Context,
-};
+use mongodb::{bson::doc, Collection};
+use serenity::{self, futures::StreamExt, prelude::Context};
 
-use crate::{
-    config::Config,
-    error::Error,
-    util::database::BotMessageType,
-};
+use crate::{config::Config, error::Error, util::database::BotMessageType};
 
-use super::database::{
-    BotMessage,
-    DiscordString,
-    SessionType,
-    Weekend,
-};
+use super::database::{BotMessage, DiscordString, SessionType, Weekend};
 
 pub async fn get_notifications(
     notifications: &Collection<BotMessage>
@@ -78,6 +59,7 @@ pub async fn create_persistent_message(
     let message = channel
         .send_message(&ctx.http, |msg| msg.content(weekend_as_string))
         .await?;
+
     let mut hasher = DefaultHasher::new();
     weekend.hash(&mut hasher);
     Ok(BotMessage::new_persistent(*message.id.as_u64(), hasher.finish()))
@@ -178,4 +160,22 @@ pub async fn create_or_update_persistent_message(
         notifications.insert_one(new_message, None).await?;
         Ok(new_message)
     }
+}
+
+pub async fn remove_all_reactions(
+    notifications: &Collection<BotMessage>,
+    ctx: &Context,
+    config: &Config,
+) -> Result<(), Error> {
+    let botmessage = get_persistent_message(notifications).await?;
+    if let Some(botmessage) = botmessage {
+        let internal_message = ctx
+            .http
+            .get_message(config.discord.channel, botmessage.discord_id)
+            .await?;
+
+        internal_message.delete_reactions(&ctx).await?;
+    }
+
+    Ok(())
 }
