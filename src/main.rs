@@ -38,8 +38,8 @@ use serenity::{
 use crate::util::{
     database::{filter_current_weekend, BotMessage, Weekend},
     helpers::{
-        delete_notification, get_persistent_message, notify_session,
-        remove_all_reactions,
+        delete_notification, delete_persistent_message, get_persistent_message,
+        notify_session, remove_all_reactions, remove_persistent_bot_message,
     },
 };
 
@@ -202,10 +202,18 @@ impl EventHandler for Bot {
                                         None,
                                     )
                                     .await;
-                                let _ = remove_all_reactions(
+                                if delete_persistent_message(
                                     &messages, &_ctx, &conf,
                                 )
-                                .await;
+                                .await
+                                .is_ok()
+                                    && remove_persistent_bot_message(&messages)
+                                        .await
+                                        .is_ok()
+                                {
+                                    last_hash = 1337;
+                                    continue;
+                                }
                             }
                         }
 

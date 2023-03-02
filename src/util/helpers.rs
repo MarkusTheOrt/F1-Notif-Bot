@@ -1,6 +1,7 @@
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
+    io,
 };
 
 use chrono::Utc;
@@ -106,17 +107,56 @@ pub async fn notify_session(
     if let Some(channel) = channel.guild() {
         let msg = channel
             .send_message(&ctx, |new_message| {
-                new_message.content(format!(
-                    "**<@&{}> -- {} {} just started!**",
-                    config.discord.role,
-                    weekend.name,
-                    session.short_name()
-                ))
+                new_message
+                    .content(format!(
+                        "**<@&{}> -- {} {} just started!**",
+                        config.discord.role,
+                        weekend.name,
+                        session.short_name()
+                    ))
+                    .add_file("./config/cats.mp4")
             })
             .await?;
         return Ok(Some(BotMessage::new_notification(msg.id.into())));
     }
     Ok(None)
+}
+
+pub async fn remove_persistent_message(
+    ctx: &Context,
+    config: &Config,
+    messages: &Collection<BotMessage>,
+) -> Result<(), Error> {
+    let persistent_message = get_persistent_message(messages).await?;
+    if let Some(persistent_message) = persistent_message {
+        let discord_message = ctx
+            .http
+            .get_message(config.discord.channel, persistent_message.discord_id)
+            .await?;
+        discord_message.delete(ctx).await?;
+        return Ok(());
+    }
+
+    Err(Error::Io(io::Error::new(io::ErrorKind::InvalidData, "test")))
+}
+
+pub async fn remove_persistent_bot_message(
+    messages: &Collection<BotMessage>
+) -> Result<(), Error> {
+    let msg = get_persistent_message(messages).await?;
+    if let Some(msg) = msg {
+        messages
+            .delete_one(
+                doc! {
+                    "_id": msg.id
+                },
+                None,
+            )
+            .await?;
+        return Ok(());
+    }
+
+    Err(Error::Io(io::Error::new(io::ErrorKind::InvalidData, "test")))
 }
 
 pub async fn delete_notification(
