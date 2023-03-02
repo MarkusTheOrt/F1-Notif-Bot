@@ -39,7 +39,7 @@ use crate::util::{
     database::{filter_current_weekend, BotMessage, Weekend},
     helpers::{
         delete_notification, delete_persistent_message, get_persistent_message,
-        notify_session, remove_all_reactions, remove_persistent_bot_message,
+        notify_session, remove_persistent_bot_message,
     },
 };
 
