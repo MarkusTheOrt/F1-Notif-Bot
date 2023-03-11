@@ -1,9 +1,9 @@
-name: "Docker Build"
+name: "Docker Build staging"
 
 on:
   push:
     branches:
-      - "production"
+      - "main"
     paths-ignore:
       - "*.md"
       - ".gitignore"
