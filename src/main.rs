@@ -299,8 +299,10 @@ async fn main() {
             if let Err(config_why) = generate_default_config() {
                 println!("Error generating config: {config_why}")
             }
+            exit(0x0100)
         } else {
-            println!("Error reading config file: {why}")
+            println!("Error reading config file: {why}");
+            exit(0x0100)
         }
     }
 
@@ -335,9 +337,8 @@ async fn main() {
     }
 
     let mut client = client.unwrap();
-    let run = client.start().await;
 
-    if let Err(why) = run {
+    if let Err(why) = client.start().await {
         println!("Error occured while running the client: {why}");
         return;
     }
