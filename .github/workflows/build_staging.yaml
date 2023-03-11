@@ -12,7 +12,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: markustheort/f1-notif-bot
-  IMAGE_TAG: latest
+  IMAGE_TAG: staging
 
 jobs:
   build:
@@ -39,7 +39,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging
 
       - name: Build and push Docker images
         id: build-and-push
@@ -47,5 +47,5 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging
           labels: ${{ steps.meta.output.labels }}
