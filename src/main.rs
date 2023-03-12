@@ -36,7 +36,7 @@ use serenity::{
 };
 
 use crate::util::{
-    database::{filter_current_weekend, BotMessage, Weekend},
+    database::{filter_current_weekend, BotMessage, DiscordString, Weekend},
     helpers::{
         delete_notification, delete_persistent_message, get_persistent_message,
         notify_session, remove_persistent_bot_message,
@@ -160,7 +160,7 @@ impl EventHandler for Bot {
                     }
 
                     if let Ok(Some(mut weekend)) = weekend {
-                        weekend.hash(&mut hasher);
+                        weekend.to_display().hash(&mut hasher);
                         let h = hasher.finish();
                         let sess = weekend.get_next_session();
 
@@ -223,7 +223,7 @@ impl EventHandler for Bot {
                                 &messages, &_ctx, &conf, &weekend,
                             )
                             .await;
-
+                            println!("Hash is different, sending update!");
                             if error.is_err() {
                                 println!("message does not exist");
                                 exit(0x0100);
