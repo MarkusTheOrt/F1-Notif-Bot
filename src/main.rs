@@ -223,7 +223,7 @@ impl EventHandler for Bot {
                                 &messages, &_ctx, &conf, &weekend,
                             )
                             .await;
-                            println!("Hash is different, sending update!");
+
                             if error.is_err() {
                                 println!("message does not exist");
                                 exit(0x0100);
