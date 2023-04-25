@@ -30,9 +30,11 @@ pub enum SessionType {
     Test(TestSession),
     // Pratice sessions (FP1, FP2, FP3)
     Practice(PracticeSession),
-    // Qualifying (Includes both Sprint and Race Quali)
+
+    SprintQuali(Qualifying),
+    Shootout(Qualifying),
     Qualifying(Qualifying),
-    // Sprint Race ()
+
     Sprint(Race),
     Race(Race),
 }
@@ -41,6 +43,8 @@ impl SessionType {
     pub fn is_notified(&self) -> bool {
         match self {
             SessionType::None => true,
+            SessionType::Shootout(sess) => sess.notified,
+            SessionType::SprintQuali(sess) => sess.notified,
             SessionType::Test(sess) => sess.notified,
             SessionType::Practice(sess) => sess.notified,
             SessionType::Qualifying(sess) => sess.notified,
@@ -52,6 +56,8 @@ impl SessionType {
     pub fn set_modified(&mut self) {
         match self {
             SessionType::None => {},
+            SessionType::Shootout(sess) => sess.notified = true,
+            SessionType::SprintQuali(sess) => sess.notified = true,
             SessionType::Test(sess) => sess.notified = true,
             SessionType::Practice(sess) => sess.notified = true,
             SessionType::Qualifying(sess) => sess.notified = true,
@@ -62,7 +68,9 @@ impl SessionType {
 
     pub fn short_name(&self) -> String {
         match self {
-            SessionType::None => "Unsupported (WTF) session".to_owned(),
+            SessionType::SprintQuali(_) => "Deprecated.".to_owned(),
+            SessionType::Shootout(_) => "Sprint Shootout".to_owned(),
+            SessionType::None => "Unsupported session".to_owned(),
             SessionType::Test(_) => "Test session".to_owned(),
             SessionType::Practice(sess) => format!("FP{}", sess.number),
             SessionType::Qualifying(_) => "Qualifying".to_owned(),
@@ -108,49 +116,10 @@ pub trait DiscordString {
     fn to_display(&self) -> String;
 }
 
-impl DiscordString for Race {
-    fn to_display(&self) -> String {
-        let timestamp = self.time.timestamp();
-        format!("> **`Race:      `** <t:{timestamp}:f> 	(<t:{timestamp}:R>)")
-    }
-}
-
-impl DiscordString for Qualifying {
-    fn to_display(&self) -> String {
-        let timestamp = self.time.timestamp();
-        let strikethrough = if self.notified {
-            "~~"
-        } else {
-            ""
-        };
-        format!("> {strikethrough}**`Qualifying:`** <t:{timestamp}:f> 	(<t:{timestamp}:R>){strikethrough}")
-    }
-}
-
-impl DiscordString for PracticeSession {
-    fn to_display(&self) -> String {
-        let timestamp = self.time.timestamp();
-        let strikethrough = if self.notified {
-            "~~"
-        } else {
-            ""
-        };
-        format!(
-            "> {strikethrough}**`FP{}:       `** <t:{timestamp}:f> 	(<t:{timestamp}:R>){strikethrough}",
-            self.number
-        )
-    }
-}
-
 impl DiscordString for SessionType {
     fn to_display(&self) -> String {
         let (name, timestamp, strikethrough) = match self {
-            SessionType::None => (
-                "Error (unkown session type)` <@142951266811641856> `Please fix."
-                    .to_owned(),
-                0,
-                false,
-            ),
+            SessionType::None => ("Unknown".to_owned(), 0, false),
             SessionType::Test(sess) => (
                 "Testing session:".to_owned(),
                 sess.time.timestamp(),
@@ -165,6 +134,15 @@ impl DiscordString for SessionType {
             ),
             SessionType::Qualifying(sess) => (
                 "Qualifying: ".to_owned(),
+                sess.time.timestamp(),
+                sess.time.signed_duration_since(Utc::now())
+                    < -sess.get_duration(),
+            ),
+            SessionType::SprintQuali(_) => {
+                ("Deprecated (Sprint Qualifying)".to_owned(), 0i64, false)
+            },
+            Self::Shootout(sess) => (
+                "Sprint Shootout".to_owned(),
                 sess.time.timestamp(),
                 sess.time.signed_duration_since(Utc::now())
                     < -sess.get_duration(),
@@ -299,7 +277,9 @@ impl SessionType {
             SessionType::None => None,
             SessionType::Test(sess) => Some(sess.get_duration()),
             SessionType::Practice(sess) => Some(sess.get_duration()),
-            SessionType::Qualifying(sess) => Some(sess.get_duration()),
+            SessionType::Qualifying(sess)
+            | SessionType::SprintQuali(sess)
+            | SessionType::Shootout(sess) => Some(sess.get_duration()),
             SessionType::Sprint(sess) | SessionType::Race(sess) => {
                 Some(sess.get_duration())
             },
@@ -315,13 +295,12 @@ impl SessionType {
             SessionType::Practice(sess) => {
                 Some(Utc::now().signed_duration_since(sess.time).num_minutes())
             },
-            SessionType::Qualifying(sess) => {
+            SessionType::Qualifying(sess)
+            | SessionType::SprintQuali(sess)
+            | SessionType::Shootout(sess) => {
                 Some(Utc::now().signed_duration_since(sess.time).num_minutes())
             },
-            SessionType::Sprint(sess) => {
-                Some(Utc::now().signed_duration_since(sess.time).num_minutes())
-            },
-            SessionType::Race(sess) => {
+            SessionType::Sprint(sess) | SessionType::Race(sess) => {
                 Some(Utc::now().signed_duration_since(sess.time).num_minutes())
             },
         }

@@ -3,7 +3,6 @@
   "task.allowAutomaticTasks": "on",
   "rust-analyzer.checkOnSave.overrideCommand": [
     "cargo",
-    "+nightly",
     "clippy",
     "--message-format=json"
   ],
