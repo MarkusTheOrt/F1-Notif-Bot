@@ -127,13 +127,13 @@ impl DiscordString for SessionType {
                     < -sess.get_duration(),
             ),
             SessionType::Practice(sess) => (
-                format!("FP{}:        ", sess.number),
+                format!("FP{}:            ", sess.number),
                 sess.time.timestamp(),
                 sess.time.signed_duration_since(Utc::now())
                     < -sess.get_duration(),
             ),
             SessionType::Qualifying(sess) => (
-                "Qualifying: ".to_owned(),
+                "Qualifying:     ".to_owned(),
                 sess.time.timestamp(),
                 sess.time.signed_duration_since(Utc::now())
                     < -sess.get_duration(),
@@ -142,19 +142,19 @@ impl DiscordString for SessionType {
                 ("Deprecated (Sprint Qualifying)".to_owned(), 0i64, false)
             },
             Self::Shootout(sess) => (
-                "Sprint Shootout".to_owned(),
+                "Sprint Shootout:".to_owned(),
                 sess.time.timestamp(),
                 sess.time.signed_duration_since(Utc::now())
                     < -sess.get_duration(),
             ),
             SessionType::Sprint(sess) => (
-                "Sprint Race:".to_owned(),
+                "Sprint Race:    ".to_owned(),
                 sess.time.timestamp(),
                 sess.time.signed_duration_since(Utc::now())
                     < -sess.get_duration(),
             ),
             SessionType::Race(sess) => (
-                "Race:       ".to_owned(),
+                "Race:           ".to_owned(),
                 sess.time.timestamp(),
                 sess.time.signed_duration_since(Utc::now())
                     < -sess.get_duration(),
