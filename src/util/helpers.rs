@@ -6,7 +6,13 @@ use std::{
 
 use chrono::Utc;
 use mongodb::{bson::doc, Collection};
-use serenity::{self, futures::StreamExt, prelude::Context};
+use serenity::{
+    self,
+    all::ChannelId,
+    builder::{CreateMessage, EditMessage, CreateAttachment},
+    futures::StreamExt,
+    prelude::Context,
+};
 
 use crate::{config::Config, error::Error, util::database::BotMessageType};
 
@@ -40,9 +46,8 @@ pub async fn delete_persistent_message(
     while let Some(message) = messages.next().await {
         let message = message?;
         if let BotMessageType::Persistent(_) = &message.kind {
-            ctx.http
-                .delete_message(config.discord.channel, message.discord_id)
-                .await?;
+            let channel = ChannelId::new(config.discord.channel);
+            channel.delete_message(ctx, message.discord_id).await?;
         }
     }
     Ok(())
@@ -54,16 +59,13 @@ pub async fn create_persistent_message(
     weekend: &Weekend,
 ) -> Result<BotMessage, Error> {
     let weekend_as_string = weekend.to_display();
-    let channel = ctx.http.get_channel(config.discord.channel).await?;
-
-    let channel = channel.guild().unwrap();
-    let message = channel
-        .send_message(&ctx.http, |msg| msg.content(weekend_as_string))
-        .await?;
+    let channel = ChannelId::new(config.discord.channel);
+    let new_message = CreateMessage::default().content(weekend_as_string);
+    let msg = channel.send_message(ctx, new_message).await?;
 
     let mut hasher = DefaultHasher::new();
     weekend.hash(&mut hasher);
-    Ok(BotMessage::new_persistent(*message.id.as_u64(), hasher.finish()))
+    Ok(BotMessage::new_persistent(*msg.id.as_inner(), hasher.finish()))
 }
 
 pub async fn get_persistent_message(
@@ -85,14 +87,9 @@ pub async fn update_persistent_message(
     config: &Config,
     weekend: &Weekend,
 ) -> Result<(), Error> {
-    let mut internal_message = ctx
-        .http
-        .get_message(config.discord.channel, message.discord_id)
-        .await?;
-
-    internal_message
-        .edit(&ctx.http, |edit| edit.content(weekend.to_display()))
-        .await?;
+    let channel = ChannelId::new(config.discord.channel);
+    let edit_message = EditMessage::default().content(weekend.to_display());
+    channel.edit_message(ctx, message.discord_id, edit_message).await?;
 
     Ok(())
 }
@@ -103,23 +100,19 @@ pub async fn notify_session(
     session: &SessionType,
     weekend: &Weekend,
 ) -> Result<Option<BotMessage>, Error> {
-    let channel = ctx.http.get_channel(config.discord.channel).await?;
-    if let Some(channel) = channel.guild() {
-        let msg = channel
-            .send_message(&ctx, |new_message| {
-                new_message
-                    .content(format!(
-                        "**<@&{}> -- {} {} just started!**",
-                        config.discord.role,
-                        weekend.name,
-                        session.short_name()
-                    ))
-                    .add_file("./config/cats.mp4")
-            })
-            .await?;
-        return Ok(Some(BotMessage::new_notification(msg.id.into())));
-    }
-    Ok(None)
+    let channel = ChannelId::new(config.discord.channel);
+    let bongocat = CreateAttachment::path("/config/cats.mp4").await?;
+    let new_message = CreateMessage::default()
+        .content(format!(
+            "**<@&{}> -- {} {} just started!**",
+            config.discord.role,
+            weekend.name,
+            session.short_name()
+        ))
+        .add_file(bongocat);
+
+    let notification = channel.send_message(ctx, new_message).await?;
+    return Ok(Some(BotMessage::new_notification(*notification.id.as_inner())));
 }
 
 pub async fn remove_persistent_message(
@@ -129,11 +122,8 @@ pub async fn remove_persistent_message(
 ) -> Result<(), Error> {
     let persistent_message = get_persistent_message(messages).await?;
     if let Some(persistent_message) = persistent_message {
-        let discord_message = ctx
-            .http
-            .get_message(config.discord.channel, persistent_message.discord_id)
-            .await?;
-        discord_message.delete(ctx).await?;
+        let channel = ChannelId::new(config.discord.channel);
+        channel.delete_message(ctx, persistent_message.discord_id).await?;
         return Ok(());
     }
 
@@ -173,12 +163,8 @@ pub async fn delete_notification(
         {
             return Ok(());
         }
-
-        let msg = ctx
-            .http
-            .get_message(config.discord.channel, message.discord_id)
-            .await?;
-        msg.delete(ctx).await?;
+        let channel = ChannelId::new(config.discord.channel);
+        channel.delete_message(ctx, message.discord_id).await?;
         messages.delete_one(doc! { "_id": message.id }, None).await?;
     }
     Ok(())
@@ -200,22 +186,4 @@ pub async fn create_or_update_persistent_message(
         notifications.insert_one(new_message, None).await?;
         Ok(new_message)
     }
-}
-
-pub async fn remove_all_reactions(
-    notifications: &Collection<BotMessage>,
-    ctx: &Context,
-    config: &Config,
-) -> Result<(), Error> {
-    let botmessage = get_persistent_message(notifications).await?;
-    if let Some(botmessage) = botmessage {
-        let internal_message = ctx
-            .http
-            .get_message(config.discord.channel, botmessage.discord_id)
-            .await?;
-
-        internal_message.delete_reactions(&ctx).await?;
-    }
-
-    Ok(())
 }

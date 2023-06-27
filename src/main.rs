@@ -29,7 +29,6 @@ use config::Config;
 use serenity::{
     async_trait,
     client::ClientBuilder,
-    framework::StandardFramework,
     futures::StreamExt,
     model::prelude::*,
     prelude::{Context, EventHandler},
@@ -50,15 +49,13 @@ struct Bot {
 
 #[cfg(debug_assertions)]
 async fn set_presence(ctx: &Context) {
-    ctx.set_presence(
-        Some(Activity::playing("Debug mode.")),
-        OnlineStatus::Online,
-    )
-    .await;
+    use serenity::gateway::ActivityData;
+
+    ctx.set_activity(Some(ActivityData::watching("out for new sessions.")));
 }
 
 #[cfg(not(debug_assertions))]
-async fn set_presence(ctx: &Context) {}
+async fn set_presence(_ctx: &Context) {}
 
 #[async_trait]
 impl EventHandler for Bot {
@@ -125,10 +122,10 @@ impl EventHandler for Bot {
                     .await;
                     if let Err(why) = &res {
                         println!("Error sending or updating message: {why}");
-
+                        
                         if let Error::Serenity(serenity::Error::Http(why)) = why
                         {
-                            if let serenity::http::HttpError::UnsuccessfulRequest(why) = why.as_ref() {
+                            if let serenity::http::HttpError::UnsuccessfulRequest(why) = why {
                                 println!("{}", why.error.code);
                             }
                         }
@@ -267,10 +264,14 @@ impl EventHandler for Bot {
         ready: Ready,
     ) {
         let user = &ready.user;
-        println!(
-            "Connected to discord as {}#{}",
-            user.name, user.discriminator
-        );
+        if let Some(discriminator) = user.discriminator {
+            println!("Connected as {}#{}", user.name, discriminator);
+        } else {
+            println!(
+                "Connected to discord as {}",
+                user.name
+            );
+        }
     }
 
     async fn resume(
@@ -322,12 +323,10 @@ async fn main() {
         is_mainthread_running: AtomicBool::new(false),
         config: Arc::new(config),
     };
-    let framework = StandardFramework::new();
     let client = ClientBuilder::new(
         &bot.config.discord.bot_token,
         GatewayIntents::non_privileged(),
     )
-    .framework(framework)
     .event_handler(bot)
     .await;
 

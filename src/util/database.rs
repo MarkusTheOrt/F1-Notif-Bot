@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::time::Duration;
+use std::{time::Duration, num::NonZeroU64};
 
 use chrono::{DateTime, Utc};
 use mongodb::{
@@ -377,7 +377,7 @@ pub struct BotMessage {
     #[serde(rename = "_id")]
     pub id: ObjectId,
     #[serde(with = "string")]
-    pub discord_id: u64,
+    pub discord_id: NonZeroU64,
     pub kind: BotMessageType,
 }
 
@@ -407,16 +407,6 @@ mod string {
     }
 }
 
-impl Default for BotMessage {
-    fn default() -> Self {
-        Self {
-            id: ObjectId::new(),
-            discord_id: 0,
-            kind: BotMessageType::None,
-        }
-    }
-}
-
 impl Default for BotNotification {
     fn default() -> Self {
         Self {
@@ -427,7 +417,7 @@ impl Default for BotNotification {
 
 impl BotMessage {
     pub fn new_now(
-        id: u64,
+        id: NonZeroU64,
         kind: BotMessageType,
     ) -> Self {
         Self {
@@ -437,7 +427,7 @@ impl BotMessage {
         }
     }
 
-    pub fn new_notification(id: u64) -> Self {
+    pub fn new_notification(id: NonZeroU64) -> Self {
         Self {
             id: ObjectId::new(),
             discord_id: id,
@@ -446,11 +436,12 @@ impl BotMessage {
             }),
         }
     }
-
+    
     pub fn new_persistent(
-        id: u64,
+        id: NonZeroU64,
         hash: u64,
     ) -> Self {
+        
         Self {
             id: ObjectId::new(),
             discord_id: id,
