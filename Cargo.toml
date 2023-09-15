@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chrono = "0.4.26"
+chrono = "0.4.30"
 mongodb = { version = "2.6.1", features = [ "tokio-runtime" ] }
-serde = { version = "1.0.185", features = ["derive"] }
+serde = { version = "1.0.188", features = ["derive"] }
 serenity = { version = "0.11.5", features = [], git = "https://github.com/serenity-rs/serenity/", branch = "next" }
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "signal"] }
-toml = "0.7.6"
+toml = "0.8.0"
