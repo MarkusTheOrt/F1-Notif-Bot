@@ -1,25 +1,13 @@
 #![allow(dead_code)]
 
-use std::{
-    num::NonZeroU64,
-    time::Duration,
-};
+use std::{num::NonZeroU64, time::Duration};
 
-use chrono::{
-    DateTime,
-    Utc,
-};
+use chrono::{DateTime, Utc};
 use mongodb::{
-    bson::{
-        doc,
-        oid::ObjectId,
-    },
+    bson::{doc, oid::ObjectId},
     Collection,
 };
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use serde::{Deserialize, Serialize};
 
 use serenity::futures::StreamExt;
 
@@ -35,7 +23,7 @@ pub struct Weekend {
     pub done: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash)]
 pub enum SessionType {
     None,
     // Test sessions (usually at the start of a season)
@@ -46,7 +34,7 @@ pub enum SessionType {
     SprintQuali(Qualifying),
     Shootout(Qualifying),
     Qualifying(Qualifying),
-
+    Custom(Custom),
     Sprint(Race),
     Race(Race),
 }
@@ -62,6 +50,7 @@ impl SessionType {
             SessionType::Qualifying(sess) => sess.notified,
             SessionType::Sprint(sess) => sess.notified,
             SessionType::Race(sess) => sess.notified,
+            SessionType::Custom(sess) => sess.notified,
         }
     }
 
@@ -75,6 +64,7 @@ impl SessionType {
             SessionType::Qualifying(sess) => sess.notified = true,
             SessionType::Sprint(sess) => sess.notified = true,
             SessionType::Race(sess) => sess.notified = true,
+            SessionType::Custom(sess) => sess.notified = true,
         }
     }
 
@@ -88,6 +78,7 @@ impl SessionType {
             SessionType::Qualifying(_) => "Qualifying".to_owned(),
             SessionType::Sprint(_) => "Sprint Race".to_owned(),
             SessionType::Race(_) => "Race".to_owned(),
+            SessionType::Custom(sess) => sess.name.clone(),
         }
     }
 }
@@ -104,6 +95,14 @@ pub struct Qualifying {
     pub time: DateTime<Utc>,
     pub notified: bool,
     pub duration: Duration,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Hash)]
+pub struct Custom {
+    pub time: DateTime<Utc>,
+    pub notified: bool,
+    pub duration: Duration,
+    pub name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash, Default)]
@@ -171,6 +170,12 @@ impl DiscordString for SessionType {
                 sess.time.signed_duration_since(Utc::now())
                     < -sess.get_duration(),
             ),
+            SessionType::Custom(sess) => (
+                sess.name.clone(),
+                sess.time.timestamp(),
+                sess.time.signed_duration_since(Utc::now())
+                    < -sess.get_duration(),
+            ),
         };
 
         let strikethrough = if strikethrough {
@@ -189,7 +194,7 @@ impl DiscordString for Weekend {
         for (_, sess) in self.sessions.iter().enumerate() {
             content += sess.to_display().as_str();
         }
-        content += "\n\n\nClick :mega: in <#913752470293991424> or use <id:customize> to get a notification when a session is live.";
+        content += "\n\n\nClick :mega: in <#913752470293991424> or use <id:customize> to get a notification when a session is live.\nTimes are in your timezone.";
         content
     }
 }
@@ -253,6 +258,12 @@ impl Sessions for Race {
     }
 }
 
+impl Sessions for Custom {
+    fn get_duration(&self) -> chrono::Duration {
+        chrono::Duration::from_std(self.duration).unwrap()
+    }
+}
+
 pub async fn filter_current_weekend(
     weekends: &Collection<Weekend>
 ) -> Result<Option<Weekend>, Error> {
@@ -295,6 +306,7 @@ impl SessionType {
             SessionType::Sprint(sess) | SessionType::Race(sess) => {
                 Some(sess.get_duration())
             },
+            SessionType::Custom(sess) => Some(sess.get_duration())
         }
     }
 
@@ -315,11 +327,14 @@ impl SessionType {
             SessionType::Sprint(sess) | SessionType::Race(sess) => {
                 Some(Utc::now().signed_duration_since(sess.time).num_minutes())
             },
+            SessionType::Custom(sess) => {
+                Some(Utc::now().signed_duration_since(sess.time).num_minutes())
+            }
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum WeekendState {
     None,
     FutureSession,
@@ -353,7 +368,7 @@ impl Weekend {
 
             (value, best_time) = match time_until {
                 -6..=0 => {
-                    (WeekendState::CurrentSession(i, *sess), sess.time_until())
+                    (WeekendState::CurrentSession(i, sess.clone()), sess.time_until())
                 },
                 _ => (value, best_time),
             }
@@ -394,17 +409,9 @@ pub struct BotMessage {
 }
 
 mod string {
-    use std::{
-        fmt::Display,
-        str::FromStr,
-    };
+    use std::{fmt::Display, str::FromStr};
 
-    use serde::{
-        de,
-        Deserialize,
-        Deserializer,
-        Serializer,
-    };
+    use serde::{de, Deserialize, Deserializer, Serializer};
 
     pub fn serialize<T, S>(
         value: &T,
