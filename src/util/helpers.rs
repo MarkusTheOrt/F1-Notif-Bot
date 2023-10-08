@@ -1,22 +1,41 @@
 use std::{
     collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
+    hash::{
+        Hash,
+        Hasher,
+    },
     io,
 };
 
 use chrono::Utc;
-use mongodb::{bson::doc, Collection};
+use mongodb::{
+    bson::doc,
+    Collection,
+};
 use serenity::{
     self,
     all::ChannelId,
-    builder::{CreateMessage, EditMessage, CreateAttachment},
+    builder::{
+        CreateAttachment,
+        CreateMessage,
+        EditMessage,
+    },
     futures::StreamExt,
     prelude::Context,
 };
 
-use crate::{config::Config, error::Error, util::database::BotMessageType};
+use crate::{
+    config::Config,
+    error::Error,
+    util::database::BotMessageType,
+};
 
-use super::database::{BotMessage, DiscordString, SessionType, Weekend};
+use super::database::{
+    BotMessage,
+    DiscordString,
+    SessionType,
+    Weekend,
+};
 
 pub async fn get_notifications(
     notifications: &Collection<BotMessage>
@@ -65,7 +84,7 @@ pub async fn create_persistent_message(
 
     let mut hasher = DefaultHasher::new();
     weekend.hash(&mut hasher);
-    Ok(BotMessage::new_persistent(*msg.id.as_inner(), hasher.finish()))
+    Ok(BotMessage::new_persistent(msg.id.into(), hasher.finish()))
 }
 
 pub async fn get_persistent_message(
@@ -101,7 +120,7 @@ pub async fn notify_session(
     weekend: &Weekend,
 ) -> Result<Option<BotMessage>, Error> {
     let channel = ChannelId::new(config.discord.channel);
-    let bongocat = CreateAttachment::path("/config/cats.mp4").await?;
+    let bongocat = CreateAttachment::path("./config/cats.mp4").await?;
     let new_message = CreateMessage::default()
         .content(format!(
             "**<@&{}> -- {} {} just started!**",
@@ -112,7 +131,7 @@ pub async fn notify_session(
         .add_file(bongocat);
 
     let notification = channel.send_message(ctx, new_message).await?;
-    return Ok(Some(BotMessage::new_notification(*notification.id.as_inner())));
+    return Ok(Some(BotMessage::new_notification(notification.id.into())));
 }
 
 pub async fn remove_persistent_message(

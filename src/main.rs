@@ -2,24 +2,43 @@ pub mod config;
 pub mod error;
 pub mod util;
 
-use error::{Error, Result};
+use error::{
+    Error,
+    Result,
+};
 use mongodb::{
-    bson::{self, doc},
+    bson::{
+        self,
+        doc,
+    },
     Client,
 };
 use util::{
-    database::{BotMessageType, WeekendState},
+    database::{
+        BotMessageType,
+        WeekendState,
+    },
     helpers::create_or_update_persistent_message,
 };
 
 use std::{
     collections::hash_map::DefaultHasher,
     fs::File,
-    hash::{Hash, Hasher},
-    io::{self, Read, Write},
+    hash::{
+        Hash,
+        Hasher,
+    },
+    io::{
+        self,
+        Read,
+        Write,
+    },
     process::exit,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
         Arc,
     },
     time::Duration,
@@ -31,16 +50,13 @@ use serenity::{
     client::ClientBuilder,
     futures::StreamExt,
     model::prelude::*,
-    prelude::{Context, EventHandler},
-};
-
-use crate::util::{
-    database::{filter_current_weekend, BotMessage, DiscordString, Weekend},
-    helpers::{
-        delete_notification, delete_persistent_message, get_persistent_message,
-        notify_session, remove_persistent_bot_message,
+    prelude::{
+        Context,
+        EventHandler,
     },
 };
+
+use crate::util::*;
 
 struct Bot {
     is_mainthread_running: AtomicBool,
@@ -86,8 +102,6 @@ impl EventHandler for Bot {
             ))
             .await;
 
-            // Contrary to believe this isn't actually waiting for a establshed
-            // connection but rather checking if all the options are good.
             if let Err(why) = database {
                 println!("Error creating database client: {why}");
                 exit(0x0100);
@@ -96,18 +110,15 @@ impl EventHandler for Bot {
             // Check if we actually are connected to a database server.
             println!("Connecting to database... please wait.");
 
-            // by listing database names we actually have to await a server
-            // connection.
+            // by listing database names we actually have to await a server,
+            // otherwise the driver only connects on the first call
+            // to database.
             let database_check = database.list_database_names(None, None).await;
             if let Err(why) = database_check {
                 println!("Error connecting to database: {why}");
                 exit(0x0100);
             }
-            println!("Connected to mongodb on {}", mongoconf.database);
-            // Great, we are now connected!
 
-            // Database setup, get two collections, one for all the weekends and
-            // one for all the messages.
             let db = database.database(mongoconf.database.as_str());
             let sessions = db.collection::<Weekend>("weekends");
             let messages = db.collection::<BotMessage>("messages");
@@ -122,7 +133,7 @@ impl EventHandler for Bot {
                     .await;
                     if let Err(why) = &res {
                         println!("Error sending or updating message: {why}");
-                        
+
                         if let Error::Serenity(serenity::Error::Http(why)) = why
                         {
                             if let serenity::http::HttpError::UnsuccessfulRequest(why) = why {
@@ -180,13 +191,18 @@ impl EventHandler for Bot {
                                         &_ctx, &conf, &_session, &weekend,
                                     )
                                     .await;
-                                    if let Ok(Some(new_message)) = res {
-                                        let _ = messages
-                                            .insert_one(new_message, None)
-                                            .await;
+                                    match res {
+                                        Ok(Some(new_message)) => {
+                                            let _ = messages
+                                                .insert_one(new_message, None)
+                                                .await;
+                                        },
+                                        Ok(None) => {},
+                                        Err(why) => {
+                                            eprintln!("Error posting message: \n\t`{why}`");
+                                        },
                                     }
                                 }
-                                // now post the f-ing thing.
                             }
                         } else if let WeekendState::None = sess {
                             weekend.done = true;
@@ -220,16 +236,19 @@ impl EventHandler for Bot {
                                 &messages, &_ctx, &conf, &weekend,
                             )
                             .await;
-
-                            if error.is_err() {
-                                println!("message does not exist");
+                            if let Err(why) = error {
+                                eprintln!(
+                                    "Error: Message does not exit: \n\t`{why}`"
+                                );
                                 exit(0x0100);
-                            }
+                            };
                         }
                     }
                     let messages_to_delete = messages.find(None, None).await;
                     if let Err(why) = messages_to_delete {
-                        println!("Error getting messages to delete: {why}");
+                        eprintln!(
+                            "Error getting messages to delete: \n\t`{why}`"
+                        );
                         continue;
                     }
                     let mut messages_to_delete = messages_to_delete.unwrap();
@@ -241,7 +260,7 @@ impl EventHandler for Bot {
                         )
                         .await;
                         if let Err(why) = res {
-                            println!("Error removing msgs: {why}");
+                            eprintln!("Error removing msgs: `{why}`");
                         }
                     }
                 }
@@ -267,10 +286,7 @@ impl EventHandler for Bot {
         if let Some(discriminator) = user.discriminator {
             println!("Connected as {}#{}", user.name, discriminator);
         } else {
-            println!(
-                "Connected to discord as {}",
-                user.name
-            );
+            println!("Connected to discord as {}", user.name);
         }
     }
 
@@ -298,11 +314,11 @@ async fn main() {
         if let io::ErrorKind::NotFound = why.kind() {
             println!("Generated default config file, please update settings.");
             if let Err(config_why) = generate_default_config() {
-                println!("Error generating config: {config_why}")
+                eprintln!("Error generating config: `{config_why}`")
             }
             exit(0x0100)
         } else {
-            println!("Error reading config file: {why}");
+            eprintln!("Error reading config file: {why}");
             exit(0x0100)
         }
     }
@@ -310,12 +326,12 @@ async fn main() {
     let mut config = config.unwrap();
     let mut string = "".to_owned();
     if let Err(why) = config.read_to_string(&mut string) {
-        println!("Error reading config file: {why}");
+        eprintln!("Error reading config file: \n\t`{why}`");
         return;
     }
     let config = toml::from_str::<Config>(string.as_str());
     if let Err(why) = &config {
-        println!("Error parsing config file: {why}");
+        eprintln!("Error parsing config file: \n\t`{why}`");
         return;
     }
     let config = config.unwrap();
@@ -331,14 +347,14 @@ async fn main() {
     .await;
 
     if let Err(why) = client {
-        println!("Error creating Discord client: {why}");
+        eprintln!("Error creating Discord client: \n\t`{why}`");
         return;
     }
 
     let mut client = client.unwrap();
 
     if let Err(why) = client.start().await {
-        println!("Error occured while running the client: {why}");
+        eprintln!("Error occured while running the client: \n\t`{why}`");
         return;
     }
 

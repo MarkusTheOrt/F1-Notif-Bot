@@ -1,13 +1,25 @@
 #![allow(dead_code)]
 
-use std::{time::Duration, num::NonZeroU64};
+use std::{
+    num::NonZeroU64,
+    time::Duration,
+};
 
-use chrono::{DateTime, Utc};
+use chrono::{
+    DateTime,
+    Utc,
+};
 use mongodb::{
-    bson::{doc, oid::ObjectId},
+    bson::{
+        doc,
+        oid::ObjectId,
+    },
     Collection,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use serenity::futures::StreamExt;
 
@@ -382,9 +394,17 @@ pub struct BotMessage {
 }
 
 mod string {
-    use std::{fmt::Display, str::FromStr};
+    use std::{
+        fmt::Display,
+        str::FromStr,
+    };
 
-    use serde::{de, Deserialize, Deserializer, Serializer};
+    use serde::{
+        de,
+        Deserialize,
+        Deserializer,
+        Serializer,
+    };
 
     pub fn serialize<T, S>(
         value: &T,
@@ -436,12 +456,11 @@ impl BotMessage {
             }),
         }
     }
-    
+
     pub fn new_persistent(
         id: NonZeroU64,
         hash: u64,
     ) -> Self {
-        
         Self {
             id: ObjectId::new(),
             discord_id: id,
