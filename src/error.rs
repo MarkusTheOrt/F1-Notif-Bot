@@ -1,7 +1,4 @@
-use std::{
-    fmt,
-    io,
-};
+use std::{fmt, io};
 
 use std::error::Error as StdError;
 
@@ -14,8 +11,14 @@ pub type Result<T> = StdResult<T, Error>;
 pub enum Error {
     Io(io::Error),
     Toml(toml::ser::Error),
-    Mongo(mongodb::error::Error),
     Serenity(serenity::Error),
+    Sqlx(sqlx::Error),
+}
+
+impl From<sqlx::Error> for Error {
+    fn from(value: sqlx::Error) -> Self {
+        Error::Sqlx(value)
+    }
 }
 
 impl From<io::Error> for Error {
@@ -27,12 +30,6 @@ impl From<io::Error> for Error {
 impl From<toml::ser::Error> for Error {
     fn from(value: toml::ser::Error) -> Self {
         Error::Toml(value)
-    }
-}
-
-impl From<mongodb::error::Error> for Error {
-    fn from(value: mongodb::error::Error) -> Self {
-        Error::Mongo(value)
     }
 }
 
@@ -50,7 +47,7 @@ impl fmt::Display for Error {
         match self {
             Self::Io(inner) => fmt::Display::fmt(&inner, f),
             Self::Toml(inner) => fmt::Display::fmt(&inner, f),
-            Self::Mongo(inner) => fmt::Display::fmt(&inner, f),
+            Self::Sqlx(inner) => fmt::Display::fmt(&inner, f),
             Self::Serenity(inner) => fmt::Display::fmt(&inner, f),
         }
     }
@@ -61,8 +58,8 @@ impl StdError for Error {
         match self {
             Self::Io(inner) => Some(inner),
             Self::Toml(inner) => Some(inner),
-            Self::Mongo(inner) => Some(inner),
             Self::Serenity(inner) => Some(inner),
+            Self::Sqlx(inner) => Some(inner),
         }
     }
 }

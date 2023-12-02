@@ -1,52 +1,59 @@
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use std::borrow::Cow;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Default, Debug)]
-pub struct Config {
-    pub discord: Discord,
-    pub mongo: Mongo,
+pub struct Config<'a> {
+    pub discord: DiscordConfig<'a>,
+    pub database: DatabaseConfig<'a>,
+}
+
+impl<'a> Config<'a> {
+    pub fn db_string(&self) -> String {
+        format!(
+            "mysql://{}:{}@{}/{}",
+            self.database.username,
+            self.database.password,
+            self.database.url,
+            self.database.database
+        )
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Discord {
-    pub bot_token: String,
+pub struct DiscordConfig<'a> {
+    pub bot_token: Cow<'a, str>,
     pub guild: u64,
     pub channel: u64,
     pub role: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Mongo {
-    pub url: String,
-    pub user: String,
-    pub password: String,
-    pub database: String,
-    pub protocol: String,
-    pub suffix: String,
+pub struct DatabaseConfig<'a> {
+    pub url: Cow<'a, str>,
+    pub username: Cow<'a, str>,
+    pub password: Cow<'a, str>,
+    pub database: Cow<'a, str>,
 }
 
-impl Default for Discord {
+impl Default for DatabaseConfig<'_> {
     fn default() -> Self {
         Self {
-            bot_token: "DISCORD_BOT_TOKEN".to_owned(),
-            guild: 883847530687913995,
-            channel: 1002285400095719524,
-            role: 1033311726889861244,
+            url: "mysql://127.0.0.1:3306".into(),
+            username: "notifbot".into(),
+            password: "password".into(),
+            database: "notifbot".into(),
         }
     }
 }
 
-impl Default for Mongo {
+impl Default for DiscordConfig<'_> {
     fn default() -> Self {
         Self {
-            url: "localhost:27017".to_owned(),
-            user: "notificationsbot".to_owned(),
-            password: "YOUR_PASSWORD".to_owned(),
-            database: "notifbot".to_owned(),
-            protocol: "mongodb".to_owned(),
-            suffix: "".to_owned(),
+            bot_token: "DISCORD_BOT_TOKEN".into(),
+            guild: 883847530687913995,
+            channel: 1002285400095719524,
+            role: 1033311726889861244,
         }
     }
 }
