@@ -24,8 +24,14 @@ impl<'a> Config<'a> {
 pub struct DiscordConfig<'a> {
     pub bot_token: Cow<'a, str>,
     pub guild: u64,
-    pub channel: u64,
-    pub role: u64,
+    pub f1_channel: u64,
+    pub f1_role: u64,
+    pub f2_channel: u64,
+    pub f2_role: u64,
+    pub f3_channel: u64,
+    pub f3_role: u64,
+    pub f1a_role: u64,
+    pub f1a_channel: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -52,8 +58,14 @@ impl Default for DiscordConfig<'_> {
         Self {
             bot_token: "DISCORD_BOT_TOKEN".into(),
             guild: 883847530687913995,
-            channel: 1002285400095719524,
-            role: 1033311726889861244,
+            f1_channel: 1002285400095719524,
+            f1_role: 1033311726889861244,
+            f2_channel: 1002285400095719524,
+            f2_role: 1033311726889861244,
+            f3_channel: 1002285400095719524,
+            f3_role: 1033311726889861244,
+            f1a_channel: 1002285400095719524,
+            f1a_role: 1033311726889861244,
         }
     }
 }

@@ -1,110 +1,16 @@
+pub mod bot;
 pub mod config;
 pub mod error;
 pub mod model;
 pub mod util;
 
-use error::Error;
 use sqlx::{mysql::MySqlConnectOptions, MySqlPool};
-use std::{
-    fs::File,
-    io::{self, Read, Write},
-    process::exit,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-};
+use std::{fs::File, io::Read, sync::atomic::AtomicBool};
 
 use config::Config;
-use serenity::{
-    async_trait,
-    client::ClientBuilder,
-    model::prelude::*,
-    prelude::{Context, EventHandler},
-};
+use serenity::{client::ClientBuilder, prelude::GatewayIntents};
 
-struct Bot<'a> {
-    is_mainthread_running: AtomicBool,
-    pub config: Arc<Config<'a>>,
-    pub database: sqlx::MySqlPool,
-}
-
-#[cfg(debug_assertions)]
-async fn set_presence(ctx: &Context) {
-    use serenity::gateway::ActivityData;
-
-    ctx.set_activity(Some(ActivityData::watching("out for new sessions.")));
-}
-
-#[cfg(not(debug_assertions))]
-async fn set_presence(_ctx: &Context) {}
-
-#[async_trait]
-impl<'a> EventHandler for Bot<'a> {
-    async fn cache_ready(
-        &self,
-        _ctx: Context,
-        _guilds: Vec<GuildId>,
-    ) {
-        if self.is_mainthread_running.load(Ordering::Relaxed) {
-            return;
-        }
-        set_presence(&_ctx).await;
-
-        self.is_mainthread_running.swap(true, Ordering::Relaxed);
-        tokio::spawn(async move {});
-    }
-
-    async fn message_delete(
-        &self,
-        _ctx: Context,
-        _channel_id: ChannelId,
-        _deleted_message_id: MessageId,
-        _guild_id: Option<GuildId>,
-    ) {
-    }
-
-    async fn ready(
-        &self,
-        _ctx: Context,
-        ready: Ready,
-    ) {
-        let user = &ready.user;
-        if let Some(discriminator) = user.discriminator {
-            println!("Connected as {}#{}", user.name, discriminator);
-        } else {
-            println!("Connected to discord as {}", user.name);
-        }
-    }
-
-    async fn resume(
-        &self,
-        _: Context,
-        _: ResumedEvent,
-    ) {
-    }
-}
-
-fn generate_default_config() -> Result<(), Error> {
-    let config = Config::default();
-    let str_to_write = toml::to_string_pretty(&config)?;
-    let mut config_file = File::create("./config/config.toml")?;
-    config_file.write_all(str_to_write.as_bytes())?;
-    Ok(())
-}
-
-fn handle_config_error(why: std::io::Error) -> ! {
-    if let io::ErrorKind::NotFound = why.kind() {
-        println!("Generated default config file, please update settings.");
-        if let Err(config_why) = generate_default_config() {
-            eprintln!("Error generating config: `{config_why}`")
-        }
-        exit(0x0100)
-    } else {
-        eprintln!("Error reading config file: {why}");
-        exit(0x0100)
-    }
-}
+use crate::{bot::{Bot, calendar::populate_calendar}, model::Series, util::{handle_config_error, get_weekends_without_sessions}};
 
 #[tokio::main]
 async fn main() {
@@ -112,7 +18,6 @@ async fn main() {
         Ok(config) => config,
         Err(why) => handle_config_error(why),
     };
-
     let mut string = "".to_owned();
     if let Err(why) = config.read_to_string(&mut string) {
         return eprintln!("Error reading config file: \n\t`{why}`");
@@ -132,11 +37,31 @@ async fn main() {
         Err(why) => return eprintln!("Error creating db client:\n\t`{why}`"),
     };
 
+    let Ok(mut cat_video) = File::open("./config/cats.mp4") else {
+        eprintln!("Error opening the cat.");
+        return;
+    };
+
+    let Ok(cat_meta) = cat_video.metadata() else {
+        eprintln!("No metadata on the cat.");
+        return;
+    };
+    let mut cat_data = Vec::with_capacity(cat_meta.len() as usize);
+
+    let Ok(_) = cat_video.read_to_end(&mut cat_data) else {
+        eprintln!("Can't see the cats insides.");
+        return;
+    };
+
+    let config = Box::leak(Box::new(config));
+
     let bot = Bot {
         is_mainthread_running: AtomicBool::new(false),
-        config: Arc::new(config),
+        config,
         database,
+        cat: cat_data.leak(),
     };
+
     let mut client = match ClientBuilder::new(
         &bot.config.discord.bot_token,
         GatewayIntents::non_privileged(),

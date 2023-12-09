@@ -13,6 +13,7 @@ pub enum Error {
     Toml(toml::ser::Error),
     Serenity(serenity::Error),
     Sqlx(sqlx::Error),
+    NotFound,
 }
 
 impl From<sqlx::Error> for Error {
@@ -49,6 +50,7 @@ impl fmt::Display for Error {
             Self::Toml(inner) => fmt::Display::fmt(&inner, f),
             Self::Sqlx(inner) => fmt::Display::fmt(&inner, f),
             Self::Serenity(inner) => fmt::Display::fmt(&inner, f),
+            Self::NotFound => f.write_str("Not Found (LIB Error)")
         }
     }
 }
@@ -60,6 +62,7 @@ impl StdError for Error {
             Self::Toml(inner) => Some(inner),
             Self::Serenity(inner) => Some(inner),
             Self::Sqlx(inner) => Some(inner),
+            Self::NotFound => None,
         }
     }
 }
