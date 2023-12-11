@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use chrono::{DateTime, Utc};
-use sqlx::{MySqlPool, Executor};
+use sqlx::MySqlPool;
 
 use crate::{
     error::Error,
@@ -105,7 +105,7 @@ JOIN sessions on weekends.id = sessions.weekend
 WHERE weekends.id = (
 		SELECT id 
 		FROM weekends
-		WHERE NOT status = 2
+		WHERE NOT status = \"Done\"
         AND series = ?
 		ORDER BY ABS( DATEDIFF(weekends.start_date, now() ))
 		LIMIT 1
@@ -261,7 +261,8 @@ pub async fn get_weekends_without_sessions<'r, 'e>(
     }
 
     impl<'a, 'b> From<QueryData<'a>> for Weekend<'b>
-        where 'a: 'b
+    where
+        'a: 'b,
     {
         fn from(value: QueryData<'a>) -> Self {
             Self {

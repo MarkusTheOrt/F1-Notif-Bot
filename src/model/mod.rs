@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fmt::Display};
 
-#[derive(Serialize, Deserialize, Clone, Copy, sqlx::Type, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, sqlx::Type, Debug, Hash)]
 pub enum Series {
     F1,
     F2,
@@ -18,7 +18,7 @@ impl From<String> for Series {
             "F2" => Self::F2,
             "F3" => Self::F3,
             "F1Academy" => Self::F1Academy,
-            _ => Self::Unsupported
+            _ => Self::Unsupported,
         }
     }
 }
@@ -30,16 +30,16 @@ impl From<u8> for Series {
             1 => Self::F2,
             2 => Self::F3,
             3 => Self::F1Academy,
-            _ => Self::Unsupported
+            _ => Self::Unsupported,
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, sqlx::Type, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, sqlx::Type, Debug, Hash)]
 pub enum WeekendStatus {
     Open,
     Cancelled,
-    Done
+    Done,
 }
 
 impl From<String> for WeekendStatus {
@@ -48,7 +48,7 @@ impl From<String> for WeekendStatus {
             "Open" => Self::Open,
             "Cancelled" => Self::Cancelled,
             "Done" => Self::Done,
-            _ => Self::Done
+            _ => Self::Done,
         }
     }
 }
@@ -58,12 +58,12 @@ impl From<u8> for WeekendStatus {
         match value {
             0 => Self::Open,
             1 => Self::Cancelled,
-            _ => Self::Done
+            _ => Self::Done,
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, sqlx::Type, Debug)]
+#[derive(Serialize, Deserialize, Clone, sqlx::Type, Debug, Hash)]
 pub enum SessionKind {
     Custom,
     Practice,
@@ -72,7 +72,8 @@ pub enum SessionKind {
     SprintRace,
     SprintQuali,
     PreSeasonTest,
-    Unsupported
+    FeatureRace,
+    Unsupported,
 }
 
 impl From<String> for SessionKind {
@@ -85,21 +86,7 @@ impl From<String> for SessionKind {
             "SprintRace" => Self::SprintRace,
             "SprintQuali" => Self::SprintRace,
             "PreSeasonTest" => Self::PreSeasonTest,
-            _ => Self::Unsupported
-        }
-    }
-}
-
-impl From<u8> for SessionKind {
-    fn from(value: u8) -> Self {
-        match value {
-            0 => Self::Custom,
-            1 => Self::Practice,
-            2 => Self::Qualifying,
-            3 => Self::Race,
-            4 => Self::SprintRace,
-            5 => Self::SprintQuali,
-            6 => Self::PreSeasonTest,
+            "FeatureRace" => Self::FeatureRace,
             _ => Self::Unsupported,
         }
     }
@@ -118,12 +105,13 @@ impl Display for SessionKind {
             SessionKind::SprintRace => f.write_str("Sprint Race"),
             SessionKind::SprintQuali => f.write_str("Sprint Shootout"),
             SessionKind::PreSeasonTest => f.write_str("Pre-Season Test"),
-            Self::Unsupported => f.write_str("Unsupported")
+            SessionKind::FeatureRace => f.write_str("Feature Race"),
+            Self::Unsupported => f.write_str("Unsupported"),
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, sqlx::Type, Debug)]
+#[derive(Serialize, Deserialize, Clone, sqlx::Type, Debug, Hash)]
 pub enum SessionStatus {
     Open,
     Delayed,
@@ -151,7 +139,7 @@ impl From<String> for SessionStatus {
             "Delayed" => Self::Delayed,
             "Cancelled" => Self::Cancelled,
             "Done" => Self::Done,
-            _ => Self::Unsupported
+            _ => Self::Unsupported,
         }
     }
 }
@@ -163,12 +151,12 @@ impl From<u8> for SessionStatus {
             1 => Self::Delayed,
             2 => Self::Cancelled,
             3 => Self::Done,
-            _ => Self::Unsupported
+            _ => Self::Unsupported,
         }
     }
-}   
+}
 
-#[derive(Serialize, Deserialize, Clone, sqlx::Type, Debug)]
+#[derive(Serialize, Deserialize, Clone, sqlx::Type, Debug, Hash)]
 pub enum NotificationSetting {
     Notify,
     Ignore,
@@ -187,13 +175,12 @@ impl From<u8> for NotificationSetting {
     fn from(value: u8) -> Self {
         match value {
             0 => Self::Notify,
-            _ => Self::Ignore
+            _ => Self::Ignore,
         }
     }
 }
 
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Hash)]
 pub struct Session {
     pub id: u32,
     pub weekend: u32,
@@ -206,13 +193,7 @@ pub struct Session {
     pub title: Option<String>,
 }
 
-impl PartialEq for Session {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Hash)]
 pub struct Weekend<'a> {
     pub id: u32,
     pub series: Series,
@@ -221,11 +202,31 @@ pub struct Weekend<'a> {
     pub sessions: Vec<Session>,
     pub year: u16,
     pub start_date: DateTime<Utc>,
-    pub status: WeekendStatus
+    pub status: WeekendStatus,
+}
+
+impl<'a> Display for Weekend<'a> {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        f.write_fmt(format_args!("{} **{}**", self.icon, self.name))?;
+        for session in self.sessions.iter() {
+            f.write_fmt(format_args!(
+                "\n> {session}: <t:{}:f> (<t:{}:R>)",
+                session.date.timestamp(),
+                session.date.timestamp()
+            ))?;
+        }
+        Ok(())
+    }
 }
 
 impl PartialEq for Weekend<'_> {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         self.id == other.id
     }
 }
@@ -235,12 +236,52 @@ impl Display for Session {
         &self,
         f: &mut std::fmt::Formatter<'_>,
     ) -> std::fmt::Result {
-        f.write_str(&format!(
-            "> `{:>14}:` <t:{}:F> - <t:{}:R>",
-            format!("{}{}", self.kind, self.number.as_ref().unwrap_or(&0)),
-            self.date.timestamp(),
-            self.date.timestamp()
-        ))
+        let title = match &self.title {
+            None => "No title supplied".to_owned(),
+            Some(t) => t.clone(),
+        };
+        let number = match self.number {
+            None => "".to_owned(),
+            Some(t) => format!("{t}"),
+        };
+        match self.kind {
+            SessionKind::Custom => f.write_str(&title),
+            SessionKind::Practice => {
+                f.write_fmt(format_args!("`         FP{number}`"))
+            },
+            SessionKind::Qualifying => f.write_str("`  Qualifying`"),
+            SessionKind::Race => f.write_str("`        Race`"),
+            SessionKind::SprintRace => f.write_str("` Sprint Race`"),
+            SessionKind::SprintQuali => f.write_str("`Sprint Quali`"),
+            SessionKind::FeatureRace => f.write_str("`Feature Race`"),
+            SessionKind::PreSeasonTest => f.write_str("`Pre-Season Test`"),
+            SessionKind::Unsupported => f.write_str("Unsupported!!"),
+        }?;
+        Ok(())
+    }
+}
+
+impl Session {
+    pub fn pretty_name(&self) -> String {
+        if let Some(title) = &self.title {
+            return title.to_owned();
+        }
+        let number = match self.number {
+            None => "".to_owned(),
+            Some(t) => format!("{t}"),
+        };
+
+        match self.kind {
+            SessionKind::Custom => "No title supplied".to_owned(),
+            SessionKind::Practice => format!("FP{number}"),
+            SessionKind::Qualifying => "Qualifying".to_owned(),
+            SessionKind::Race => "Race".to_owned(),
+            SessionKind::SprintRace => "Sprint Race".to_owned(),
+            SessionKind::SprintQuali => "Sprint Shootout".to_owned(),
+            SessionKind::PreSeasonTest => "Pre-Season Test".to_owned(),
+            SessionKind::FeatureRace => "Feature Race".to_owned(),
+            SessionKind::Unsupported => "Unkown session type".to_owned(),
+        }
     }
 }
 
@@ -249,7 +290,7 @@ pub enum MessageKind {
     Persistent,
     Notification,
     Calendar,
-    Unsupported
+    Unsupported,
 }
 
 impl From<String> for MessageKind {
@@ -258,7 +299,7 @@ impl From<String> for MessageKind {
             "Persistent" => Self::Persistent,
             "Notification" => Self::Notification,
             "Calendar" => Self::Calendar,
-            _ => Self::Unsupported
+            _ => Self::Unsupported,
         }
     }
 }
@@ -270,5 +311,6 @@ pub struct BotMessage {
     pub message: u64,
     pub kind: MessageKind,
     pub posted: DateTime<Utc>,
-    pub hash: Option<u64>
+    pub hash: Option<u64>,
+    pub series: Series,
 }

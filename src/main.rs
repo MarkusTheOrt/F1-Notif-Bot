@@ -10,7 +10,7 @@ use std::{fs::File, io::Read, sync::atomic::AtomicBool};
 use config::Config;
 use serenity::{client::ClientBuilder, prelude::GatewayIntents};
 
-use crate::{bot::{Bot, calendar::populate_calendar}, model::Series, util::{handle_config_error, get_weekends_without_sessions}};
+use crate::{bot::Bot, util::handle_config_error};
 
 #[tokio::main]
 async fn main() {

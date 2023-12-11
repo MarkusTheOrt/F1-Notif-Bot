@@ -12,6 +12,7 @@ use serenity::{
     async_trait,
     prelude::*,
 };
+use sqlx::MySqlPool;
 
 use self::{
     calendar::{populate_calendar, update_calendar},
@@ -35,6 +36,80 @@ fn set_presence(ctx: &Context) {
 #[cfg(not(debug_assertions))]
 async fn set_presence(_ctx: &Context) {}
 
+#[tokio::main]
+async fn main_runner(
+    pool: &MySqlPool,
+    conf: &Config,
+    http: impl CacheHttp,
+) {
+    loop {
+        let _ = populate_calendar(
+            pool,
+            http.http(),
+            conf.discord.f1_channel,
+            Series::F1,
+        )
+        .await;
+        let _ = populate_calendar(
+            pool,
+            http.http(),
+            conf.discord.f2_channel,
+            Series::F2,
+        )
+        .await;
+
+        let _ = populate_calendar(
+            pool,
+            http.http(),
+            conf.discord.f3_channel,
+            Series::F3,
+        )
+        .await;
+
+        let _ = populate_calendar(
+            pool,
+            http.http(),
+            conf.discord.f1a_channel,
+            Series::F1Academy,
+        )
+        .await;
+
+        let _ = update_calendar(
+            pool,
+            http.http(),
+            conf.discord.f1_channel,
+            Series::F1,
+        )
+        .await;
+
+        let _ = update_calendar(
+            pool,
+            http.http(),
+            conf.discord.f2_channel,
+            Series::F2,
+        )
+        .await;
+
+        let _ = update_calendar(
+            pool,
+            http.http(),
+            conf.discord.f3_channel,
+            Series::F3,
+        )
+        .await;
+
+        let _ = update_calendar(
+            pool,
+            http.http(),
+            conf.discord.f1a_channel,
+            Series::F1Academy,
+        )
+        .await;
+        // update calendar every 15 minutes
+        std::thread::sleep(Duration::from_secs(60 * 15));
+    }
+}
+
 #[async_trait]
 impl EventHandler for Bot {
     async fn cache_ready(
@@ -42,34 +117,26 @@ impl EventHandler for Bot {
         ctx: Context,
         _guilds: Vec<GuildId>,
     ) {
+        // prevent double-starting threads
         if self.is_mainthread_running.load(Ordering::Relaxed) {
             return;
         }
         set_presence(&ctx);
-
-        let _ = populate_calendar(
-            &self.database,
-            &ctx.http,
-            self.config.discord.f1_channel,
-            Series::F1,
-        )
-        .await;
-        let t = update_calendar(
-            &self.database,
-            &ctx.http,
-            self.config.discord.f1_channel,
-            Series::F1,
-        )
-        .await;
-
-        println!("{:#?}", t);
 
         let pool_1 = self.database.clone();
         let http = ctx.http.clone();
         let conf = self.config;
         let cat = self.cat;
         self.is_mainthread_running.swap(true, Ordering::Relaxed);
+        let pool_2 = self.database.clone();
+        std::thread::spawn(move || {
+            main_runner(&pool_2, conf, ctx);
+        });
         tokio::spawn(async move {
+            let mut f1_hash = 0u64;
+            let mut f2_hash = 0u64;
+            let mut f3_hash = 0u64;
+            let mut f1a_hash = 0u64;
             loop {
                 tokio::join!(
                     runner(
@@ -79,6 +146,7 @@ impl EventHandler for Bot {
                         conf.discord.f1_role,
                         crate::model::Series::F1,
                         cat,
+                        &mut f1_hash
                     ),
                     runner(
                         &pool_1,
@@ -87,6 +155,7 @@ impl EventHandler for Bot {
                         conf.discord.f2_role,
                         crate::model::Series::F2,
                         cat,
+                        &mut f2_hash
                     ),
                     runner(
                         &pool_1,
@@ -95,6 +164,7 @@ impl EventHandler for Bot {
                         conf.discord.f3_role,
                         crate::model::Series::F3,
                         cat,
+                        &mut f3_hash
                     ),
                     runner(
                         &pool_1,
@@ -103,6 +173,7 @@ impl EventHandler for Bot {
                         conf.discord.f1a_role,
                         crate::model::Series::F1Academy,
                         cat,
+                        &mut f1a_hash
                     )
                 );
 
