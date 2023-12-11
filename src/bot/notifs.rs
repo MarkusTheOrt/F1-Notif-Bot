@@ -26,7 +26,7 @@ pub async fn delete_persistent_message(
     db: impl MySqlExecutor<'_> + Copy,
     http: impl http::CacheHttp,
     channel_id: u64,
-    series: Series
+    series: Series,
 ) -> Result<(), Error> {
     let msg = sqlx::query_as!(
         BotMessage,
@@ -164,10 +164,26 @@ pub async fn runner(
             return;
         },
     };
+
+    let mut has_open_sessions = false;
+    for session in weekend.sessions.iter() {
+        if matches!(session.status, SessionStatus::Open) {
+            has_open_sessions = true;
+            break;
+        }
+    }
+    if !has_open_sessions {
+        if let Err(why) = mark_weekend_done(weekend.id, pool).await {
+            eprintln!("Error marking weekend as done: {why}");
+        }
+    }
+
     if *hash == 0 {
         *hash = weekend.id;
     } else if *hash != weekend.id {
-        if let Err(why) = delete_persistent_message(pool, http, channel_id, series).await {
+        if let Err(why) =
+            delete_persistent_message(pool, http, channel_id, series).await
+        {
             eprintln!("Error deleting persistent message: {why}");
         }
     }
@@ -278,6 +294,19 @@ pub async fn send_message(
     Ok(message.id)
 }
 
+fn persistent_message_str(
+    weekend: &Weekend<'_>,
+    _series: Series,
+) -> String {
+    format!(
+        r#"**Next Event**
+{weekend}
+
+Use <#913752470293991424> or <id:customize> to get a notification when a session is live.
+Times are in your timezone"#
+    )
+}
+
 pub async fn mark_session_notified(
     id: u32,
     pool: &sqlx::MySqlPool,
@@ -351,7 +380,11 @@ pub async fn post_new_persistent(
 ) -> Result<(BotMessage, serenity::all::Message), Error> {
     let channel = ChannelId::new(channel_id);
     let message = channel
-        .send_message(http, CreateMessage::new().content(format!("{weekend}")))
+        .send_message(
+            http,
+            CreateMessage::new()
+                .content(persistent_message_str(weekend, series)),
+        )
         .await?;
 
     let mut hasher = DefaultHasher::new();
@@ -395,10 +428,20 @@ pub async fn update_persistent_message(
     mut dc_msg: serenity::all::Message,
     hash: u64,
 ) -> Result<(), Error> {
-    dc_msg.edit(http, EditMessage::new().content(format!("{weekend}"))).await?;
-    sqlx::query!("UPDATE messages SET hash = cast(? as UNSIGNED) WHERE id = ?", hash, db_msg.id)
-        .execute(db)
+    dc_msg
+        .edit(
+            http,
+            EditMessage::new()
+                .content(persistent_message_str(weekend, Series::F1)),
+        )
         .await?;
+    sqlx::query!(
+        "UPDATE messages SET hash = cast(? as UNSIGNED) WHERE id = ?",
+        hash,
+        db_msg.id
+    )
+    .execute(db)
+    .await?;
     Ok(())
 }
 
