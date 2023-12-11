@@ -89,17 +89,14 @@ pub async fn check_notify_session<'a>(
             },
         }
 
-        match session.notify {
-            NotificationSetting::Ignore => {
-                mark_session_notified(session.id, pool).await?;
-                continue;
-            },
-            NotificationSetting::Notify => {},
-        }
 
         let difference = Utc::now() - session.date;
         if difference.num_minutes() > -5 && difference.num_minutes() < 0 {
-            return Ok(Some(session));
+            if matches!(session.notify, NotificationSetting::Notify) {
+                return Ok(Some(session));
+            } else {
+                mark_weekend_done(session.id, pool).await?;
+            }
         }
     }
     Ok(None)
