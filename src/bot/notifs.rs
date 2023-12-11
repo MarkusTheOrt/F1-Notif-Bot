@@ -95,7 +95,7 @@ pub async fn check_notify_session<'a>(
             if matches!(session.notify, NotificationSetting::Notify) {
                 return Ok(Some(session));
             } else {
-                mark_weekend_done(session.id, pool).await?;
+                mark_session_notified(session.id, pool).await?;
             }
         }
     }
