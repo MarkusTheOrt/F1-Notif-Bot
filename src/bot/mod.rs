@@ -1,7 +1,7 @@
 pub mod calendar;
 pub mod notifs;
 
-use crate::{config::Config, model::Series};
+use crate::{bot::notifs::remove_old_notifs, config::Config, model::Series};
 use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
@@ -133,10 +133,10 @@ impl EventHandler for Bot {
             main_runner(&pool_2, conf, ctx);
         });
         tokio::spawn(async move {
-            let mut f1_hash = 0u64;
-            let mut f2_hash = 0u64;
-            let mut f3_hash = 0u64;
-            let mut f1a_hash = 0u64;
+            let mut f1_wknd_id = 0u32;
+            let mut f2_wknd_id = 0u32;
+            let mut f3_wknd_id = 0u32;
+            let mut f1a_wknd_id = 0u32;
             loop {
                 tokio::join!(
                     runner(
@@ -146,7 +146,7 @@ impl EventHandler for Bot {
                         conf.discord.f1_role,
                         crate::model::Series::F1,
                         cat,
-                        &mut f1_hash
+                        &mut f1_wknd_id
                     ),
                     runner(
                         &pool_1,
@@ -155,7 +155,7 @@ impl EventHandler for Bot {
                         conf.discord.f2_role,
                         crate::model::Series::F2,
                         cat,
-                        &mut f2_hash
+                        &mut f2_wknd_id
                     ),
                     runner(
                         &pool_1,
@@ -164,7 +164,7 @@ impl EventHandler for Bot {
                         conf.discord.f3_role,
                         crate::model::Series::F3,
                         cat,
-                        &mut f3_hash
+                        &mut f3_wknd_id
                     ),
                     runner(
                         &pool_1,
@@ -173,10 +173,13 @@ impl EventHandler for Bot {
                         conf.discord.f1a_role,
                         crate::model::Series::F1Academy,
                         cat,
-                        &mut f1a_hash
+                        &mut f1a_wknd_id
                     )
                 );
 
+                if let Err(why) = remove_old_notifs(&pool_1, &http).await {
+                    eprintln!("Error removing old notifs: {why}");
+                }
                 std::thread::sleep(Duration::from_secs(5));
             }
         });

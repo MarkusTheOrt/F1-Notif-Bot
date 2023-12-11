@@ -73,7 +73,6 @@ pub async fn populate_calendar(
             .await?;
     let notifs =
         get_calendar_notifs(connection.acquire().await?, channel, series).await?;
-
     if notifs.len() < calendar.len() {
         for _ in notifs.len()..(calendar.len()) {
             if let Err(why) = reserve_calendar_message(
