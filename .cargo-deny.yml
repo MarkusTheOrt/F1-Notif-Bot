@@ -1,0 +1,8 @@
+stages:          # List of stages for jobs, and their order of execution
+  - run
+
+run:   # This job also runs in the test stage.
+  stage: test    # It can run at the same time as unit-test-job (in parallel).
+  script:
+    - cargo deny check advisories
+
