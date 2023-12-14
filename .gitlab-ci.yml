@@ -23,19 +23,16 @@ stages:          # List of stages for jobs, and their order of execution
 build-job:       # This job runs in the build stage, which runs first.
   stage: build
   script:
-    - source "$HOME/.cargo/env"
     - cargo build --release
 
 rustfmt:
     stage: test
     script:
-        - source "$HOME/.cargo/env"
         - cargo fmt --all
 
 lint-test-job:   # This job also runs in the test stage.
   stage: test    # It can run at the same time as unit-test-job (in parallel).
   script:
-    - source "$HOME/.cargo/env"
     - cargo clippy -all
 
 
