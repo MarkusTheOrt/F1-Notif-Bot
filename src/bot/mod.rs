@@ -50,7 +50,7 @@ async fn main_runner(
             Series::F1,
         )
         .await;
-        let _ = populate_calendar(
+        /*let _ = populate_calendar(
             pool,
             http.http(),
             conf.discord.f2_channel,
@@ -72,7 +72,7 @@ async fn main_runner(
             conf.discord.f1a_channel,
             Series::F1Academy,
         )
-        .await;
+        .await;*/
 
         let _ = update_calendar(
             pool,
@@ -82,7 +82,7 @@ async fn main_runner(
         )
         .await;
 
-        let _ = update_calendar(
+      /*  let _ = update_calendar(
             pool,
             http.http(),
             conf.discord.f2_channel,
@@ -104,7 +104,7 @@ async fn main_runner(
             conf.discord.f1a_channel,
             Series::F1Academy,
         )
-        .await;
+        .await;*/
         // update calendar every 15 minutes
         std::thread::sleep(Duration::from_secs(60 * 15));
     }
@@ -148,7 +148,7 @@ impl EventHandler for Bot {
                         cat,
                         &mut f1_wknd_id
                     ),
-                    runner(
+               /*     runner(
                         &pool_1,
                         &http,
                         conf.discord.f2_channel,
@@ -174,7 +174,7 @@ impl EventHandler for Bot {
                         crate::model::Series::F1Academy,
                         cat,
                         &mut f1a_wknd_id
-                    )
+                    )*/
                 );
 
                 if let Err(why) = remove_old_notifs(&pool_1, &http).await {
