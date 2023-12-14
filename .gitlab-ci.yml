@@ -19,7 +19,7 @@
 stages:
   - build
   - test
-  - security
+  - deny
 
 build-job:
   stage: build
@@ -37,8 +37,22 @@ lint-test-job:
     - cargo clippy
 
 check-advisories:
-  stage: security
+  stage: deny
   allow_failure: true
   script:
     - cargo deny check advisories
 
+check-licenses:
+  stage: deny
+  script:
+    - cargo deny check licenses
+
+check-bans:
+  stage: deny
+  script:
+    - cargo deny check bans
+
+check-sources:
+  stage: deny
+  script:
+    - cargo deny check sources
