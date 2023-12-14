@@ -28,11 +28,11 @@ build-job:       # This job runs in the build stage, which runs first.
 rustfmt:
     stage: test
     script:
-        - cargo fmt --all
+        - cargo fmt --all --check
 
 lint-test-job:   # This job also runs in the test stage.
   stage: test    # It can run at the same time as unit-test-job (in parallel).
   script:
-    - cargo clippy -all
+    - cargo clippy
 
 
