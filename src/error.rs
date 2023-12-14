@@ -50,7 +50,7 @@ impl fmt::Display for Error {
             Self::Toml(inner) => fmt::Display::fmt(&inner, f),
             Self::Sqlx(inner) => fmt::Display::fmt(&inner, f),
             Self::Serenity(inner) => fmt::Display::fmt(&inner, f),
-            Self::NotFound => f.write_str("Not Found (LIB Error)")
+            Self::NotFound => f.write_str("Not Found (LIB Error)"),
         }
     }
 }

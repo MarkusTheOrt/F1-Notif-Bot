@@ -82,7 +82,7 @@ async fn main_runner(
         )
         .await;
 
-      /*  let _ = update_calendar(
+        /*  let _ = update_calendar(
             pool,
             http.http(),
             conf.discord.f2_channel,
@@ -148,7 +148,7 @@ impl EventHandler for Bot {
                         cat,
                         &mut f1_wknd_id
                     ),
-               /*     runner(
+                    /*     runner(
                         &pool_1,
                         &http,
                         conf.discord.f2_channel,

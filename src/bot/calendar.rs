@@ -20,7 +20,7 @@ use crate::{
 pub async fn get_calendar_notifs(
     pool: impl MySqlExecutor<'_>,
     channel: u64,
-    series: Series
+    series: Series,
 ) -> Result<Vec<BotMessage>, sqlx::Error> {
     sqlx::query_as!(
         BotMessage,
@@ -39,7 +39,7 @@ pub async fn reserve_calendar_message(
     pool: impl MySqlExecutor<'_>,
     http: &Http,
     channel: u64,
-    series: Series
+    series: Series,
 ) -> Result<(), Error> {
     let channel_id = ChannelId::new(channel);
     let msg = channel_id
@@ -72,14 +72,15 @@ pub async fn populate_calendar(
         get_weekends_without_sessions(connection.acquire().await?, series)
             .await?;
     let notifs =
-        get_calendar_notifs(connection.acquire().await?, channel, series).await?;
+        get_calendar_notifs(connection.acquire().await?, channel, series)
+            .await?;
     if notifs.len() < calendar.len() {
         for _ in notifs.len()..(calendar.len()) {
             if let Err(why) = reserve_calendar_message(
                 connection.acquire().await?,
                 http,
                 channel,
-                series
+                series,
             )
             .await
             {
@@ -104,17 +105,17 @@ pub async fn update_calendar(
     let mut calendar = get_all_weekends(pool, series).await?;
     let mut weekends = get_weekends_without_sessions(pool, series).await?;
     let notifs = get_calendar_notifs(pool, channel, series).await?;
-    
+
     for wknd in weekends.iter_mut() {
-        let Some(wknd_full) = calendar.iter_mut().find(|f| f.id == wknd.id) else {
+        let Some(wknd_full) = calendar.iter_mut().find(|f| f.id == wknd.id)
+        else {
             continue;
         };
         std::mem::swap(&mut wknd.sessions, &mut wknd_full.sessions);
     }
 
     let weekends_iter = weekends.into_iter();
-    for (weekend, msg) in weekends_iter.zip(notifs.into_iter())
-    {
+    for (weekend, msg) in weekends_iter.zip(notifs.into_iter()) {
         let mut hasher = DefaultHasher::new();
         weekend.hash(&mut hasher);
         let hash = hasher.finish();

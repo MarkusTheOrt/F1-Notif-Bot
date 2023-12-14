@@ -89,7 +89,6 @@ pub async fn check_notify_session<'a>(
             },
         }
 
-
         let difference = Utc::now() - session.date;
         if difference.num_minutes() > -5 && difference.num_minutes() < 0 {
             if matches!(session.notify, NotificationSetting::Notify) {
