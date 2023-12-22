@@ -7,13 +7,14 @@ use std::{
 use serenity::{
     all::ChannelId,
     builder::{CreateMessage, EditMessage},
-    http::Http,
+    futures::future::join_all,
+    http::{CacheHttp, Http},
 };
 use sqlx::{Acquire, MySqlExecutor, MySqlPool};
 
 use crate::{
     error::Error,
-    model::{BotMessage, MessageKind, Series},
+    model::{BotMessage, MessageKind, Series, Weekend},
     util::{get_all_weekends, get_weekends_without_sessions},
 };
 
@@ -89,7 +90,7 @@ pub async fn populate_calendar(
             }
 
             // sleep for one second so we don't have messed up lists
-            std::thread::sleep(Duration::from_secs(1));
+            std::thread::sleep(Duration::from_millis(200));
         }
     }
 
@@ -114,7 +115,8 @@ pub async fn update_calendar(
         std::mem::swap(&mut wknd.sessions, &mut wknd_full.sessions);
     }
 
-    let weekends_iter = weekends.into_iter();
+    let weekends_iter = weekends.iter();
+    let mut futures = Vec::with_capacity(weekends_iter.len());
     for (weekend, msg) in weekends_iter.zip(notifs.into_iter()) {
         let mut hasher = DefaultHasher::new();
         weekend.hash(&mut hasher);
@@ -123,20 +125,48 @@ pub async fn update_calendar(
         if msg.hash.is_some_and(|f| f == hash) {
             continue;
         }
-        let mut message =
-            http.get_message(channel.into(), msg.message.into()).await?;
-        message
-            .edit(http, EditMessage::new().content(format!("{weekend}")))
-            .await?;
-
-        sqlx::query!(
-            "UPDATE messages SET hash = cast(? as UNSIGNED) WHERE id = ?",
+        futures.push(update_message(
+            channel,
+            msg.message,
+            http,
+            pool,
+            weekend,
             hash,
-            msg.id
-        )
-        .execute(pool)
-        .await?;
+        ));
     }
+
+    let results = join_all(futures).await;
+    for result in results.into_iter() {
+        if let Err(why) = result {
+            eprintln!("Error updating message: \n\t`{why}`")
+        }
+    }
+
+    Ok(())
+}
+
+async fn update_message(
+    channel_id: u64,
+    message_id: u64,
+    http: impl CacheHttp,
+    db: impl MySqlExecutor<'_>,
+    weekend: &Weekend<'_>,
+    hash: u64,
+) -> Result<(), Error> {
+    let mut message =
+        http.http().get_message(channel_id.into(), message_id.into()).await?;
+
+    message
+        .edit(http, EditMessage::new().content(format!("{weekend}")))
+        .await?;
+
+    sqlx::query!(
+        "UPDATE messages SET hash = cast(? as UNSIGNED) WHERE id = ?",
+        hash,
+        message_id
+    )
+    .execute(db)
+    .await?;
 
     Ok(())
 }
