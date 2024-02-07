@@ -295,7 +295,7 @@ fn persistent_message_str(
     _series: Series,
 ) -> String {
     format!(
-        r#"**Next Event**
+        r#"## Next Event
 {weekend}
 
 Use <#913752470293991424> or <id:customize> to get a notification when a session is live.
