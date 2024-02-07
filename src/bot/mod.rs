@@ -13,7 +13,6 @@ use serenity::{
     prelude::*,
 };
 
-
 use self::notifs::runner;
 
 pub struct Bot {

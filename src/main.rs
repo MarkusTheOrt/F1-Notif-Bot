@@ -4,9 +4,9 @@ pub mod error;
 pub mod model;
 pub mod util;
 
+use anyhow::anyhow;
 use sqlx::{mysql::MySqlConnectOptions, MySqlPool};
 use std::{fs::File, io::Read, sync::atomic::AtomicBool};
-use anyhow::anyhow;
 
 use config::Config;
 use serenity::{client::ClientBuilder, prelude::GatewayIntents};
@@ -25,7 +25,9 @@ async fn main() -> shuttle_serenity::ShuttleSerenity {
     }
     let config = match toml::from_str::<Config>(string.as_str()) {
         Ok(config) => config,
-        Err(why) => return Err(anyhow!("Error parsing config file:\n\t`{why}`").into()),
+        Err(why) => {
+            return Err(anyhow!("Error parsing config file:\n\t`{why}`").into())
+        },
     };
 
     let db_options = MySqlConnectOptions::new()
@@ -35,7 +37,9 @@ async fn main() -> shuttle_serenity::ShuttleSerenity {
         .host(&config.database.url);
     let database = match MySqlPool::connect_with(db_options).await {
         Ok(db) => db,
-        Err(why) => return Err(anyhow!("Error creating db client:\n\t`{why}`").into()),
+        Err(why) => {
+            return Err(anyhow!("Error creating db client:\n\t`{why}`").into())
+        },
     };
 
     let Ok(mut cat_video) = File::open("./config/cats.mp4") else {
@@ -44,7 +48,6 @@ async fn main() -> shuttle_serenity::ShuttleSerenity {
 
     let Ok(cat_meta) = cat_video.metadata() else {
         return Err(anyhow!("No metadata on the cat.").into());
-        
     };
     let mut cat_data = Vec::with_capacity(cat_meta.len() as usize);
 
@@ -70,7 +73,9 @@ async fn main() -> shuttle_serenity::ShuttleSerenity {
     {
         Ok(client) => client,
         Err(why) => {
-            return Err(anyhow!("Error creating discord client: \n\t`{why}`").into())
+            return Err(
+                anyhow!("Error creating discord client: \n\t`{why}`").into()
+            )
         },
     };
 
