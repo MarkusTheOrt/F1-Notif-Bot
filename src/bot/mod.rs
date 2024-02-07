@@ -1,7 +1,7 @@
 pub mod calendar;
 pub mod notifs;
 
-use crate::{bot::notifs::remove_old_notifs, config::Config, model::Series};
+use crate::{bot::notifs::remove_old_notifs, config::Config};
 use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
@@ -12,12 +12,9 @@ use serenity::{
     async_trait,
     prelude::*,
 };
-use sqlx::MySqlPool;
 
-use self::{
-    calendar::{populate_calendar, update_calendar},
-    notifs::runner,
-};
+
+use self::notifs::runner;
 
 pub struct Bot {
     pub is_mainthread_running: AtomicBool,
@@ -35,80 +32,6 @@ fn set_presence(ctx: &Context) {
 
 #[cfg(not(debug_assertions))]
 async fn set_presence(_ctx: &Context) {}
-
-#[tokio::main]
-async fn main_runner(
-    pool: &MySqlPool,
-    conf: &Config,
-    http: impl CacheHttp,
-) {
-    loop {
-        let _ = populate_calendar(
-            pool,
-            http.http(),
-            conf.discord.f1_channel,
-            Series::F1,
-        )
-        .await;
-        let _ = populate_calendar(
-            pool,
-            http.http(),
-            conf.discord.f2_channel,
-            Series::F2,
-        )
-        .await;
-
-        let _ = populate_calendar(
-            pool,
-            http.http(),
-            conf.discord.f3_channel,
-            Series::F3,
-        )
-        .await;
-
-        let _ = populate_calendar(
-            pool,
-            http.http(),
-            conf.discord.f1a_channel,
-            Series::F1Academy,
-        )
-        .await;
-
-        let _ = update_calendar(
-            pool,
-            http.http(),
-            conf.discord.f1_channel,
-            Series::F1,
-        )
-        .await;
-
-        let _ = update_calendar(
-            pool,
-            http.http(),
-            conf.discord.f2_channel,
-            Series::F2,
-        )
-        .await;
-
-        let _ = update_calendar(
-            pool,
-            http.http(),
-            conf.discord.f3_channel,
-            Series::F3,
-        )
-        .await;
-
-        let _ = update_calendar(
-            pool,
-            http.http(),
-            conf.discord.f1a_channel,
-            Series::F1Academy,
-        )
-        .await;
-        // update calendar every 15 minutes
-        std::thread::sleep(Duration::from_secs(60 * 15));
-    }
-}
 
 #[async_trait]
 impl EventHandler for Bot {
@@ -128,10 +51,6 @@ impl EventHandler for Bot {
         let conf = self.config;
         let cat = self.cat;
         self.is_mainthread_running.swap(true, Ordering::Relaxed);
-        let pool_2 = self.database.clone();
-        std::thread::spawn(move || {
-            main_runner(&pool_2, conf, ctx);
-        });
         tokio::spawn(async move {
             let mut f1_wknd_id = 0u32;
             let mut f2_wknd_id = 0u32;

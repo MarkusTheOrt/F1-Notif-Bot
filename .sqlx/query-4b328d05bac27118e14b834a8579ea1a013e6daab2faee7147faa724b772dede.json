@@ -1,0 +1,91 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT * FROM messages \nWHERE kind = ? AND channel = ? AND series = ?\nORDER by posted ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | UNSIGNED | AUTO_INCREMENT | NUM",
+          "char_set": 63,
+          "max_size": 10
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "channel",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | MULTIPLE_KEY | UNSIGNED | NO_DEFAULT_VALUE | NUM",
+          "char_set": 63,
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "message",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | UNIQUE_KEY | UNSIGNED | NO_DEFAULT_VALUE | NUM",
+          "char_set": 63,
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "kind",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "char_set": 255,
+          "max_size": 64
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "posted",
+        "type_info": {
+          "type": "Timestamp",
+          "flags": "NOT_NULL | MULTIPLE_KEY | BINARY | TIMESTAMP",
+          "char_set": 63,
+          "max_size": 19
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "hash",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "MULTIPLE_KEY | UNSIGNED | NUM",
+          "char_set": 63,
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "series",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "char_set": 255,
+          "max_size": 64
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "4b328d05bac27118e14b834a8579ea1a013e6daab2faee7147faa724b772dede"
+}

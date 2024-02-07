@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT into messages (channel, message, kind, series) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "6519189d7ddd5d147d9d77aad2622688711f4f1c94a5d22cb4fe131c9dbd8213"
+}

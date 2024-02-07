@@ -2,3 +2,4 @@
 .env
 config.toml
 config/config.toml
+Secrets.toml

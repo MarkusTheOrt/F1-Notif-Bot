@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE weekends set status = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "6e97fdfbba9c56277c4fb8a1c434214d04c79822863c92199d43c3e7a07869ee"
+}

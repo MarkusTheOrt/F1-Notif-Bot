@@ -6,25 +6,26 @@ pub mod util;
 
 use sqlx::{mysql::MySqlConnectOptions, MySqlPool};
 use std::{fs::File, io::Read, sync::atomic::AtomicBool};
+use anyhow::anyhow;
 
 use config::Config;
 use serenity::{client::ClientBuilder, prelude::GatewayIntents};
 
 use crate::{bot::Bot, util::handle_config_error};
 
-#[tokio::main]
-async fn main() {
+#[shuttle_runtime::main]
+async fn main() -> shuttle_serenity::ShuttleSerenity {
     let mut config = match File::open("./config/config.toml") {
         Ok(config) => config,
         Err(why) => handle_config_error(why),
     };
     let mut string = "".to_owned();
     if let Err(why) = config.read_to_string(&mut string) {
-        return eprintln!("Error reading config file: \n\t`{why}`");
+        return Err(anyhow!("Error reading config file: \n\t`{why}`").into());
     }
     let config = match toml::from_str::<Config>(string.as_str()) {
         Ok(config) => config,
-        Err(why) => return eprintln!("Error parsing config file:\n\t`{why}`"),
+        Err(why) => return Err(anyhow!("Error parsing config file:\n\t`{why}`").into()),
     };
 
     let db_options = MySqlConnectOptions::new()
@@ -34,23 +35,21 @@ async fn main() {
         .host(&config.database.url);
     let database = match MySqlPool::connect_with(db_options).await {
         Ok(db) => db,
-        Err(why) => return eprintln!("Error creating db client:\n\t`{why}`"),
+        Err(why) => return Err(anyhow!("Error creating db client:\n\t`{why}`").into()),
     };
 
     let Ok(mut cat_video) = File::open("./config/cats.mp4") else {
-        eprintln!("Error opening the cat.");
-        return;
+        return Err(anyhow!("Error opening the cat.").into());
     };
 
     let Ok(cat_meta) = cat_video.metadata() else {
-        eprintln!("No metadata on the cat.");
-        return;
+        return Err(anyhow!("No metadata on the cat.").into());
+        
     };
     let mut cat_data = Vec::with_capacity(cat_meta.len() as usize);
 
     let Ok(_) = cat_video.read_to_end(&mut cat_data) else {
-        eprintln!("Can't see the cats insides.");
-        return;
+        return Err(anyhow!("Can't see the cats insides.").into());
     };
 
     let config = Box::leak(Box::new(config));
@@ -62,7 +61,7 @@ async fn main() {
         cat: cat_data.leak(),
     };
 
-    let mut client = match ClientBuilder::new(
+    let client = match ClientBuilder::new(
         &bot.config.discord.bot_token,
         GatewayIntents::non_privileged(),
     )
@@ -71,14 +70,9 @@ async fn main() {
     {
         Ok(client) => client,
         Err(why) => {
-            return eprintln!("Error creating discord client: \n\t`{why}`")
+            return Err(anyhow!("Error creating discord client: \n\t`{why}`").into())
         },
     };
 
-    if let Err(why) = client.start().await {
-        eprintln!("Error occured while running the client: \n\t`{why}`");
-        return;
-    }
-
-    println!("Shutting down.");
+    Ok(client.into())
 }
