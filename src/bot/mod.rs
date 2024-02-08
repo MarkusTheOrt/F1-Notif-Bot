@@ -15,7 +15,7 @@ use serenity::{
 
 use calendar::{populate_calendar, update_calendar};
 use notifs::runner;
-use tracing::info;
+use tracing::{error, info};
 
 pub struct Bot {
     pub is_mainthread_running: AtomicBool,
@@ -178,8 +178,9 @@ impl EventHandler for Bot {
                 );
 
                 if let Err(why) = remove_old_notifs(&pool, &http).await {
-                    eprintln!("Error removing old notifs: {why}");
+                    error!("Error removing old notifs: {why}");
                 }
+                info!("checking for new live session");
                 std::thread::sleep(Duration::from_secs(5));
             }
         });
@@ -192,9 +193,9 @@ impl EventHandler for Bot {
     ) {
         let user = &ready.user;
         if let Some(discriminator) = user.discriminator {
-            println!("Connected as {}#{}", user.name, discriminator);
+            info!("Connected as {}#{}", user.name, discriminator);
         } else {
-            println!("Connected to discord as {}", user.name);
+            info!("Connected to discord as {}", user.name);
         }
     }
 }
