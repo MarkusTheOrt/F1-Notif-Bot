@@ -161,7 +161,7 @@ async fn update_message(
         .await?;
 
     sqlx::query!(
-        "UPDATE messages SET hash = cast(? as UNSIGNED) WHERE id = ?",
+        "UPDATE messages SET hash = cast(? as UNSIGNED) WHERE message = ?",
         hash,
         message_id
     )

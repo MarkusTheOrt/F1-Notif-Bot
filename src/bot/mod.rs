@@ -1,7 +1,7 @@
 pub mod calendar;
 pub mod notifs;
 
-use crate::{bot::notifs::remove_old_notifs, config::Config};
+use crate::{bot::notifs::remove_old_notifs, config::Config, model::Series};
 use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
@@ -13,7 +13,9 @@ use serenity::{
     prelude::*,
 };
 
-use self::notifs::runner;
+use calendar::{populate_calendar, update_calendar};
+use notifs::runner;
+use tracing::info;
 
 pub struct Bot {
     pub is_mainthread_running: AtomicBool,
@@ -29,8 +31,83 @@ fn set_presence(ctx: &Context) {
     ctx.set_activity(Some(ActivityData::watching("out for new sessions.")));
 }
 
+#[tokio::main]
+async fn calendar_thread(
+    pool: sqlx::MySqlPool,
+    conf: &Config,
+    http: impl CacheHttp,
+) {
+    loop {
+        let _ = populate_calendar(
+            &pool,
+            http.http(),
+            conf.discord.f1_channel,
+            Series::F1,
+        )
+        .await;
+        let _ = populate_calendar(
+            &pool,
+            http.http(),
+            conf.discord.f2_channel,
+            Series::F2,
+        )
+        .await;
+
+        let _ = populate_calendar(
+            &pool,
+            http.http(),
+            conf.discord.f3_channel,
+            Series::F3,
+        )
+        .await;
+
+        let _ = populate_calendar(
+            &pool,
+            http.http(),
+            conf.discord.f1a_channel,
+            Series::F1Academy,
+        )
+        .await;
+
+        let _ = update_calendar(
+            &pool,
+            http.http(),
+            conf.discord.f1_channel,
+            Series::F1,
+        )
+        .await;
+
+        let _ = update_calendar(
+            &pool,
+            http.http(),
+            conf.discord.f2_channel,
+            Series::F2,
+        )
+        .await;
+
+        let _ = update_calendar(
+            &pool,
+            http.http(),
+            conf.discord.f3_channel,
+            Series::F3,
+        )
+        .await;
+
+        let _ = update_calendar(
+            &pool,
+            http.http(),
+            conf.discord.f1a_channel,
+            Series::F1Academy,
+        )
+        .await;
+        // update calendar every 15 minutes
+        info!("Updating Calendar.");
+        std::thread::sleep(Duration::from_secs(60 * 15));
+    }
+}
+
 #[cfg(not(debug_assertions))]
-async fn set_presence(_ctx: &Context) {}
+fn set_presence(_ctx: &Context) {}
 
 #[async_trait]
 impl EventHandler for Bot {
@@ -43,13 +120,23 @@ impl EventHandler for Bot {
         if self.is_mainthread_running.load(Ordering::Relaxed) {
             return;
         }
+        self.is_mainthread_running.swap(true, Ordering::Relaxed);
         set_presence(&ctx);
 
-        let pool_1 = self.database.clone();
+        
+        let pool = self.database.clone();
         let http = ctx.http.clone();
         let conf = self.config;
         let cat = self.cat;
-        self.is_mainthread_running.swap(true, Ordering::Relaxed);
+        let pool_1 = self.database.clone();
+        std::thread::spawn(move || {
+            calendar_thread(
+                pool_1,
+                conf,
+                ctx.http()
+            );
+        });
+        
         tokio::spawn(async move {
             let mut f1_wknd_id = 0u32;
             let mut f2_wknd_id = 0u32;
@@ -58,7 +145,7 @@ impl EventHandler for Bot {
             loop {
                 tokio::join!(
                     runner(
-                        &pool_1,
+                        &pool,
                         &http,
                         conf.discord.f1_channel,
                         conf.discord.f1_role,
@@ -67,7 +154,7 @@ impl EventHandler for Bot {
                         &mut f1_wknd_id
                     ),
                     runner(
-                        &pool_1,
+                        &pool,
                         &http,
                         conf.discord.f2_channel,
                         conf.discord.f2_role,
@@ -76,7 +163,7 @@ impl EventHandler for Bot {
                         &mut f2_wknd_id
                     ),
                     runner(
-                        &pool_1,
+                        &pool,
                         &http,
                         conf.discord.f3_channel,
                         conf.discord.f3_role,
@@ -85,7 +172,7 @@ impl EventHandler for Bot {
                         &mut f3_wknd_id
                     ),
                     runner(
-                        &pool_1,
+                        &pool,
                         &http,
                         conf.discord.f1a_channel,
                         conf.discord.f1a_role,
@@ -95,7 +182,7 @@ impl EventHandler for Bot {
                     )
                 );
 
-                if let Err(why) = remove_old_notifs(&pool_1, &http).await {
+                if let Err(why) = remove_old_notifs(&pool, &http).await {
                     eprintln!("Error removing old notifs: {why}");
                 }
                 std::thread::sleep(Duration::from_secs(5));
