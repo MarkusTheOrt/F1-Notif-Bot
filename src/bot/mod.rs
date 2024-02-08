@@ -4,7 +4,7 @@ pub mod notifs;
 use crate::{bot::notifs::remove_old_notifs, config::Config, model::Series};
 use std::{
     sync::atomic::{AtomicBool, Ordering},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use serenity::{
@@ -15,7 +15,7 @@ use serenity::{
 
 use calendar::{populate_calendar, update_calendar};
 use notifs::runner;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub struct Bot {
     pub is_mainthread_running: AtomicBool,
@@ -138,6 +138,7 @@ impl EventHandler for Bot {
             let mut f3_wknd_id = 0u32;
             let mut f1a_wknd_id = 0u32;
             loop {
+                let now = Instant::now();
                 tokio::join!(
                     runner(
                         &pool,
@@ -180,7 +181,10 @@ impl EventHandler for Bot {
                 if let Err(why) = remove_old_notifs(&pool, &http).await {
                     error!("Error removing old notifs: {why}");
                 }
-                info!("checking for new live session");
+                let diff = Instant::now().duration_since(now);
+                if diff.as_secs() > 9 {
+                    warn!("Notification update took longer than normal, threshold: 9s, actual: {}s", diff.as_secs());
+                }
                 std::thread::sleep(Duration::from_secs(5));
             }
         });
