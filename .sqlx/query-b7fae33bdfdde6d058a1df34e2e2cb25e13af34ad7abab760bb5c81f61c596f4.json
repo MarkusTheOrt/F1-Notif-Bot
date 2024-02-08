@@ -8,7 +8,7 @@
         "name": "id",
         "type_info": {
           "type": "Long",
-          "flags": "NOT_NULL | PRIMARY_KEY | UNSIGNED | AUTO_INCREMENT | NUM",
+          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | UNSIGNED | AUTO_INCREMENT | NUM",
           "char_set": 63,
           "max_size": 10
         }
@@ -78,7 +78,7 @@
         "name": "session_id",
         "type_info": {
           "type": "Long",
-          "flags": "NOT_NULL | PRIMARY_KEY | UNSIGNED | AUTO_INCREMENT | NUM",
+          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | UNSIGNED | AUTO_INCREMENT | NUM",
           "char_set": 63,
           "max_size": 10
         }

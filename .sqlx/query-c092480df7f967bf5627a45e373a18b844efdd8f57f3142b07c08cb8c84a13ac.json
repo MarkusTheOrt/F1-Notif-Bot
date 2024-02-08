@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE messages SET hash = cast(? as UNSIGNED) WHERE message = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c092480df7f967bf5627a45e373a18b844efdd8f57f3142b07c08cb8c84a13ac"
+}

@@ -123,20 +123,15 @@ impl EventHandler for Bot {
         self.is_mainthread_running.swap(true, Ordering::Relaxed);
         set_presence(&ctx);
 
-        
         let pool = self.database.clone();
         let http = ctx.http.clone();
         let conf = self.config;
         let cat = self.cat;
         let pool_1 = self.database.clone();
         std::thread::spawn(move || {
-            calendar_thread(
-                pool_1,
-                conf,
-                ctx.http()
-            );
+            calendar_thread(pool_1, conf, ctx.http());
         });
-        
+
         tokio::spawn(async move {
             let mut f1_wknd_id = 0u32;
             let mut f2_wknd_id = 0u32;
