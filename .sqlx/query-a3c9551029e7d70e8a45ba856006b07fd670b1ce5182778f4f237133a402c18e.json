@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT\n\tweekends.*, \n\tsessions.id as session_id,\n\tsessions.kind as session_kind,\n\tsessions.start_date as session_start_date,\n\tsessions.duration as session_duration,\n\tsessions.title as session_title,\n\tsessions.number as session_number,\n    sessions.notify as session_notify,\n    sessions.status as session_status\nFROM weekends \nJOIN sessions on weekends.id = sessions.weekend\nWHERE weekends.status = \"Open\" AND weekends.series = ?\nORDER BY session_start_date ASC",
+  "query": "SELECT\n\tweekends.*, \n\tsessions.id as session_id,\n\tsessions.kind as session_kind,\n\tsessions.start_date as session_start_date,\n\tsessions.duration as session_duration,\n\tsessions.title as session_title,\n\tsessions.number as session_number,\n    sessions.notify as session_notify,\n    sessions.status as session_status\nFROM weekends \nJOIN sessions on weekends.id = sessions.weekend\nWHERE weekends.series = ?\nORDER BY session_start_date ASC",
   "describe": {
     "columns": [
       {
@@ -175,5 +175,5 @@
       false
     ]
   },
-  "hash": "02168c12dc26607a38de0bcfb82165289440e190cea51b1e92699e017bd4d2f4"
+  "hash": "a3c9551029e7d70e8a45ba856006b07fd670b1ce5182778f4f237133a402c18e"
 }

@@ -215,9 +215,9 @@ impl<'a> Display for Weekend<'a> {
         for session in self.sessions.iter() {
             let mut str = "";
             if session.date.signed_duration_since(now).num_seconds()
-                < -session.duration
+                < session.duration
             {
-                str = "~~"
+                str = "~~";
             }
             f.write_fmt(format_args!(
                 "\n> {str}{session}: <t:{}:f>{str} (<t:{}:R>)",

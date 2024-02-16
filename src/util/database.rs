@@ -237,7 +237,7 @@ pub async fn get_all_weekends<'a>(
     sessions.status as session_status
 FROM weekends 
 JOIN sessions on weekends.id = sessions.weekend
-WHERE weekends.status = \"Open\" AND weekends.series = ?
+WHERE weekends.series = ?
 ORDER BY session_start_date ASC",
         series
     )
