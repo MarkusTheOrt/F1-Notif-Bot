@@ -84,7 +84,7 @@ impl From<String> for SessionKind {
             "Qualifying" => Self::Qualifying,
             "Race" => Self::Race,
             "SprintRace" => Self::SprintRace,
-            "SprintQuali" => Self::SprintRace,
+            "SprintQuali" => Self::SprintQuali,
             "PreSeasonTest" => Self::PreSeasonTest,
             "FeatureRace" => Self::FeatureRace,
             _ => Self::Unsupported,
@@ -211,9 +211,16 @@ impl<'a> Display for Weekend<'a> {
         f: &mut std::fmt::Formatter<'_>,
     ) -> std::fmt::Result {
         f.write_fmt(format_args!("{} **{}**", self.icon, self.name))?;
+        let now = Utc::now();
         for session in self.sessions.iter() {
+            let mut str = "";
+            if session.date.signed_duration_since(now).num_seconds()
+                < -session.duration
+            {
+                str = "~~"
+            }
             f.write_fmt(format_args!(
-                "\n> {session}: <t:{}:f> (<t:{}:R>)",
+                "\n> {str}{session}: <t:{}:f>{str} (<t:{}:R>)",
                 session.date.timestamp(),
                 session.date.timestamp()
             ))?;
