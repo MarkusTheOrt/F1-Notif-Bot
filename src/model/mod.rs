@@ -220,7 +220,7 @@ impl<'a> Display for Weekend<'a> {
                 str = "~~";
             }
             f.write_fmt(format_args!(
-                "\n> {str}{session}: <t:{}:f>{str} (<t:{}:R>)",
+                "\n> {str}{session}: <t:{}:F>{str} (<t:{}:R>)",
                 session.date.timestamp(),
                 session.date.timestamp()
             ))?;
