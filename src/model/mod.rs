@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, fmt::Display};
+use std::{borrow::Cow, fmt::Display, hash::Hash};
 
 #[derive(Serialize, Deserialize, Clone, Copy, sqlx::Type, Debug, Hash)]
 pub enum Series {
@@ -193,7 +193,7 @@ pub struct Session {
     pub title: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Hash)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Weekend<'a> {
     pub id: u32,
     pub series: Series,
@@ -215,7 +215,7 @@ impl<'a> Display for Weekend<'a> {
         for session in self.sessions.iter() {
             let mut str = "";
             if session.date.signed_duration_since(now).num_seconds()
-                < session.duration
+                > session.duration
             {
                 str = "~~";
             }
@@ -226,6 +226,16 @@ impl<'a> Display for Weekend<'a> {
             ))?;
         }
         Ok(())
+    }
+}
+
+impl Hash for Weekend<'_> {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        self.sessions.hash(state);
+        format!("{self}").hash(state);
     }
 }
 
