@@ -17,7 +17,7 @@ rustfmt:
     - cargo fmt --all --check
   needs: ["build"]
 
-install-clippy:
+.install-clippy:
   stage: test
   script:
     - rustup component add clippy
@@ -25,9 +25,10 @@ install-clippy:
 
 lint-test-job:
   stage: test
+  extends: .install-clippy
   script:
     - cargo clippy
-  needs: ["build", "install-clippy"]
+  needs: ["build"]
 
 include:
   project: "internal/ci-catalog"
