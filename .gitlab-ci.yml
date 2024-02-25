@@ -3,9 +3,10 @@ stages:
   - test
   - deny
 
+
 image: "rust:latest"
 
-build-job:
+build:
   stage: build
   script:
     - cargo build --release
@@ -22,21 +23,25 @@ lint-test-job:
 
 check-advisories:
   stage: deny
+  needs: ["build"]
   allow_failure: true
   script:
     - cargo deny check advisories
 
 check-licenses:
   stage: deny
+  needs: ["build"]
   script:
     - cargo deny check licenses
 
 check-bans:
   stage: deny
+  needs: ["build"]
   script:
     - cargo deny check bans
 
 check-sources:
   stage: deny
+  needs: ["build"]
   script:
     - cargo deny check sources
