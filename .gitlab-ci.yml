@@ -3,6 +3,8 @@ stages:
   - test
   - deny
 
+image: "rust:latest"
+
 build-job:
   stage: build
   script:
