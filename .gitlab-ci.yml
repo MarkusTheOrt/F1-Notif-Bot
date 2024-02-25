@@ -35,7 +35,6 @@ include:
   project: "internal/ci-catalog"
   ref: "main"
   file: "templates/cargo_deny.yml"
-  
   inputs:
     stage: deny
 
