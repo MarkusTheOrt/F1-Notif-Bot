@@ -12,15 +12,16 @@ build:
 
 rustfmt:
   stage: test
-  script:
+  before_script:
     - rustup component add rustfmt
+  script:
     - cargo fmt --all --check
   needs: ["build"]
 
 .install-clippy:
-  stage: test
-  script:
+  before_script:
     - rustup component add clippy
+  stage: test
   needs: ["build"]
 
 lint-test-job:
