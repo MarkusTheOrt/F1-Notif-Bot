@@ -43,7 +43,7 @@ deploy:
   script: 
     - cargo install cargo-shuttle
     - cargo install sqlx-cli
-    - echo "$CONFIG" > config/config.toml
+    - cat "$CONFIG" > config/config.toml
     - cargo sqlx prepare
     - cargo shuttle deploy
   environment:
