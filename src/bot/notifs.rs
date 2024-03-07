@@ -298,7 +298,7 @@ fn persistent_message_str(
         r#"## Next Event
 {weekend}
 
-Use <#913752470293991424> or <id:customize> to get a notification when a session is live.
+Use <id:customize> to get a notification when a session is live.
 Times are in your timezone"#
     )
 }
