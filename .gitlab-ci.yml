@@ -2,6 +2,7 @@ stages:
   - build
   - test
   - deny
+  - deploy_production
 
 image: "rust:latest"
 
@@ -38,4 +39,26 @@ include:
   inputs:
     stage: deny
 
-
+deploy:
+  script: 
+    - cargo install cargo-shuttle
+    - cargo install sqlx-cli
+    - cat "$CONFIG" > config/config.toml
+    - cargo sqlx prepare
+    - cargo shuttle deploy
+  environment:
+    name: Production
+    url: https://f1-notifications.shuttleapp.rs
+    action: start
+    on_stop: stop-deploy
+  when: manual
+  
+stop-deploy:
+  script:
+    - cargo install cargo-shuttle
+    - cargo shuttle stop
+  environment:
+    name: Production
+    url: https://f1-notifications.shuttleapp.rs
+    action: stop
+  when: manual   
