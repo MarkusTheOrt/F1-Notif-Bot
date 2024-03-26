@@ -20,7 +20,7 @@ use tracing::{error, info, warn};
 pub struct Bot {
     pub is_mainthread_running: AtomicBool,
     pub config: &'static Config<'static>,
-    pub database: sqlx::MySqlPool,
+    pub database: sqlx::PgPool,
     pub cat: &'static [u8],
 }
 
@@ -33,7 +33,7 @@ fn set_presence(ctx: &Context) {
 
 #[tokio::main]
 async fn calendar_thread(
-    pool: sqlx::MySqlPool,
+    pool: sqlx::PgPool,
     conf: &Config,
     http: impl CacheHttp,
 ) {
@@ -41,14 +41,14 @@ async fn calendar_thread(
         let _ = populate_calendar(
             &pool,
             http.http(),
-            conf.discord.f1_channel,
+            conf.discord.f1_channel.into(),
             Series::F1,
         )
         .await;
         let _ = populate_calendar(
             &pool,
             http.http(),
-            conf.discord.f2_channel,
+            conf.discord.f2_channel.into(),
             Series::F2,
         )
         .await;
@@ -56,7 +56,7 @@ async fn calendar_thread(
         let _ = populate_calendar(
             &pool,
             http.http(),
-            conf.discord.f3_channel,
+            conf.discord.f3_channel.into(),
             Series::F3,
         )
         .await;
@@ -64,7 +64,7 @@ async fn calendar_thread(
         let _ = populate_calendar(
             &pool,
             http.http(),
-            conf.discord.f1a_channel,
+            conf.discord.f1a_channel.into(),
             Series::F1Academy,
         )
         .await;
@@ -72,7 +72,7 @@ async fn calendar_thread(
         let _ = update_calendar(
             &pool,
             http.http(),
-            conf.discord.f1_channel,
+            conf.discord.f1_channel.into(),
             Series::F1,
         )
         .await;
@@ -80,7 +80,7 @@ async fn calendar_thread(
         let _ = update_calendar(
             &pool,
             http.http(),
-            conf.discord.f2_channel,
+            conf.discord.f2_channel.into(),
             Series::F2,
         )
         .await;
@@ -88,7 +88,7 @@ async fn calendar_thread(
         let _ = update_calendar(
             &pool,
             http.http(),
-            conf.discord.f3_channel,
+            conf.discord.f3_channel.into(),
             Series::F3,
         )
         .await;
@@ -96,7 +96,7 @@ async fn calendar_thread(
         let _ = update_calendar(
             &pool,
             http.http(),
-            conf.discord.f1a_channel,
+            conf.discord.f1a_channel.into(),
             Series::F1Academy,
         )
         .await;
@@ -133,17 +133,17 @@ impl EventHandler for Bot {
         });
 
         tokio::spawn(async move {
-            let mut f1_wknd_id = 0u32;
-            let mut f2_wknd_id = 0u32;
-            let mut f3_wknd_id = 0u32;
-            let mut f1a_wknd_id = 0u32;
+            let mut f1_wknd_id = 0i32;
+            let mut f2_wknd_id = 0i32;
+            let mut f3_wknd_id = 0i32;
+            let mut f1a_wknd_id = 0i32;
             loop {
                 let now = Instant::now();
                 tokio::join!(
                     runner(
                         &pool,
                         &http,
-                        conf.discord.f1_channel,
+                        conf.discord.f1_channel.into(),
                         conf.discord.f1_role,
                         crate::model::Series::F1,
                         cat,
@@ -152,7 +152,7 @@ impl EventHandler for Bot {
                     runner(
                         &pool,
                         &http,
-                        conf.discord.f2_channel,
+                        conf.discord.f2_channel.into(),
                         conf.discord.f2_role,
                         crate::model::Series::F2,
                         cat,
@@ -161,7 +161,7 @@ impl EventHandler for Bot {
                     runner(
                         &pool,
                         &http,
-                        conf.discord.f3_channel,
+                        conf.discord.f3_channel.into(),
                         conf.discord.f3_role,
                         crate::model::Series::F3,
                         cat,
@@ -170,7 +170,7 @@ impl EventHandler for Bot {
                     runner(
                         &pool,
                         &http,
-                        conf.discord.f1a_channel,
+                        conf.discord.f1a_channel.into(),
                         conf.discord.f1a_role,
                         crate::model::Series::F1Academy,
                         cat,
