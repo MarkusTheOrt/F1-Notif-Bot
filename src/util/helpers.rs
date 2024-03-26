@@ -26,3 +26,70 @@ fn generate_default_config() -> Result<(), Error> {
     config_file.write_all(str_to_write.as_bytes())?;
     Ok(())
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ID(pub i64);
+
+impl From<u64> for ID {
+    fn from(value: u64) -> Self {
+        unsafe { Self(std::mem::transmute(value)) }
+    }
+}
+
+impl From<i64> for ID {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+impl ID {
+    pub fn i64(self) -> i64 {
+        self.0
+    }
+
+    pub fn u64(self) -> u64 {
+        unsafe { std::mem::transmute(self.0) }
+    }
+}
+
+impl From<ID> for i64 {
+    fn from(val: ID) -> Self {
+        val.i64()
+    }
+}
+
+impl From<ID> for u64 {
+    fn from(val: ID) -> Self {
+        val.u64()
+    }
+}
+
+impl From<Option<u64>> for ID {
+    fn from(value: Option<u64>) -> Self {
+        match value {
+            None => Self(0),
+            Some(val) => unsafe { Self(std::mem::transmute(val)) },
+        }
+    }
+}
+
+impl From<Option<i64>> for ID {
+    fn from(value: Option<i64>) -> Self {
+        match value {
+            None => Self(0),
+            Some(val) => Self(val),
+        }
+    }
+}
+
+impl From<ID> for Option<i64> {
+    fn from(value: ID) -> Self {
+        Some(value.i64())
+    }
+}
+
+impl From<ID> for Option<u64> {
+    fn from(value: ID) -> Self {
+        Some(value.u64())
+    }
+}

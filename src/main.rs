@@ -5,7 +5,7 @@ pub mod model;
 pub mod util;
 
 use anyhow::anyhow;
-use sqlx::{mysql::MySqlConnectOptions, MySqlPool};
+use sqlx::{postgres::PgConnectOptions, PgPool};
 use std::{fs::File, io::Read, sync::atomic::AtomicBool};
 
 use config::Config;
@@ -30,12 +30,11 @@ async fn main() -> shuttle_serenity::ShuttleSerenity {
         },
     };
 
-    let db_options = MySqlConnectOptions::new()
-        .ssl_mode(sqlx::mysql::MySqlSslMode::VerifyCa)
+    let db_options = PgConnectOptions::new()
         .username(&config.database.username)
         .password(&config.database.password)
         .host(&config.database.url);
-    let database = match MySqlPool::connect_with(db_options).await {
+    let database = match PgPool::connect_with(db_options).await {
         Ok(db) => db,
         Err(why) => {
             return Err(anyhow!("Error creating db client:\n\t`{why}`").into())

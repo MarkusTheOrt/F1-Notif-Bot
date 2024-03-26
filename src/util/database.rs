@@ -1,44 +1,44 @@
 use std::borrow::Cow;
 
 use chrono::{DateTime, Utc};
-use sqlx::MySqlPool;
+use sqlx::PgExecutor;
 
 use crate::{
     error::Error,
     model::{
-        BotMessage, MessageKind, NotificationSetting, Series, Session,
-        SessionKind, SessionStatus, Weekend, WeekendStatus,
+        BotMessage, NotificationSetting, Series, Session, SessionKind,
+        SessionStatus, Weekend, WeekendStatus,
     },
 };
 
 pub async fn get_current_weekend<'a>(
-    pool: &MySqlPool,
+    pool: impl PgExecutor<'_>,
     series: Series,
 ) -> Result<Weekend<'a>, Error> {
     struct QueryWeekend<'b> {
-        id: u32,
+        id: i32,
         name: Cow<'b, str>,
-        year: u16,
+        year: i16,
         icon: Cow<'b, str>,
         start_date: DateTime<Utc>,
         series: Series,
         status: WeekendStatus,
-        session_id: u32,
+        session_id: i32,
         session_kind: SessionKind,
         session_start_date: DateTime<Utc>,
         session_duration: i64,
         session_title: Option<String>,
-        session_number: Option<u8>,
+        session_number: Option<i16>,
         session_notify: NotificationSetting,
         session_status: SessionStatus,
     }
 
     struct TempWeekend<'a> {
-        pub id: u32,
+        pub id: i32,
         pub series: Series,
         pub title: Cow<'a, str>,
         pub icon: Cow<'a, str>,
-        pub year: u16,
+        pub year: i16,
         pub start_date: DateTime<Utc>,
         pub status: WeekendStatus,
     }
@@ -105,13 +105,13 @@ JOIN sessions on weekends.id = sessions.weekend
 WHERE weekends.id = (
 		SELECT id 
 		FROM weekends
-		WHERE NOT status = \"Done\"
-        AND series = ?
-		ORDER BY ABS( DATEDIFF(weekends.start_date, now() ))
+		WHERE NOT status = 'Done'
+        AND series = $1
+		ORDER BY AGE(weekends.start_date, now()) ASC
 		LIMIT 1
 	)
 ORDER BY session_start_date ASC",
-        series
+        series.str()
     )
     .fetch_all(pool)
     .await?;
@@ -120,45 +120,45 @@ ORDER BY session_start_date ASC",
 }
 
 pub async fn get_expired_messages(
-    pool: &MySqlPool
+    pool: impl PgExecutor<'_>
 ) -> Result<Vec<BotMessage>, sqlx::Error> {
     sqlx::query_as!(
         BotMessage,
-        "SELECT * FROM messages WHERE kind = ? AND posted < DATE_SUB(NOW(), INTERVAL 30 MINUTE)",
-        MessageKind::Notification
+        "SELECT * FROM messages WHERE kind = $1 AND posted < now() - INTERVAL '30 MINUTES'",
+        "Notification"
     )
     .fetch_all(pool)
     .await
 }
 
 pub async fn get_all_weekends<'a>(
-    pool: &MySqlPool,
+    pool: impl PgExecutor<'_>,
     series: Series,
 ) -> Result<Vec<Weekend<'a>>, Error> {
     struct QueryWeekend<'b> {
-        id: u32,
+        id: i32,
         name: Cow<'b, str>,
-        year: u16,
+        year: i16,
         icon: Cow<'b, str>,
         start_date: DateTime<Utc>,
         series: Series,
         status: WeekendStatus,
-        session_id: u32,
+        session_id: i32,
         session_kind: SessionKind,
         session_start_date: DateTime<Utc>,
         session_duration: i64,
         session_title: Option<String>,
-        session_number: Option<u8>,
+        session_number: Option<i16>,
         session_notify: NotificationSetting,
         session_status: SessionStatus,
     }
 
     struct TempWeekend<'a> {
-        pub id: u32,
+        pub id: i32,
         pub series: Series,
         pub title: Cow<'a, str>,
         pub icon: Cow<'a, str>,
-        pub year: u16,
+        pub year: i16,
         pub start_date: DateTime<Utc>,
         pub status: WeekendStatus,
     }
@@ -237,9 +237,9 @@ pub async fn get_all_weekends<'a>(
     sessions.status as session_status
 FROM weekends 
 JOIN sessions on weekends.id = sessions.weekend
-WHERE weekends.series = ?
+WHERE weekends.series = $1
 ORDER BY session_start_date ASC",
-        series
+        series.str()
     )
     .fetch_all(pool)
     .await?;
@@ -247,15 +247,15 @@ ORDER BY session_start_date ASC",
 }
 
 pub async fn get_weekends_without_sessions<'r, 'e>(
-    pool: impl sqlx::MySqlExecutor<'_>,
+    pool: impl PgExecutor<'_>,
     series: Series,
 ) -> Result<Vec<Weekend<'e>>, sqlx::Error> {
     struct QueryData<'a> {
-        pub id: u32,
+        pub id: i32,
         pub series: Series,
         pub name: Cow<'a, str>,
         pub icon: Cow<'a, str>,
-        pub year: u16,
+        pub year: i16,
         pub start_date: DateTime<Utc>,
         pub status: WeekendStatus,
     }
@@ -280,10 +280,10 @@ pub async fn get_weekends_without_sessions<'r, 'e>(
 
     Ok(sqlx::query_as!(
         QueryData,
-        "SELECT * from weekends WHERE series = ?
+        "SELECT * from weekends WHERE series = $1
 ORDER BY start_date ASC
         ",
-        series
+        series.str()
     )
     .fetch_all(pool)
     .await?

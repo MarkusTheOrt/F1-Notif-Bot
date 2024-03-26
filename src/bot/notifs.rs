@@ -11,29 +11,29 @@ use serenity::{
     http::{self, Http, StatusCode},
     prelude::{CacheHttp, HttpError},
 };
-use sqlx::{mysql::MySqlQueryResult, MySqlExecutor};
+use sqlx::PgExecutor;
 
 use crate::{
     error::Error,
     model::{
         BotMessage, MessageKind, NotificationSetting, Series, Session,
-        SessionStatus, Weekend, WeekendStatus,
+        SessionStatus, Weekend,
     },
-    util::get_current_weekend,
+    util::{get_current_weekend, ID},
 };
 
 pub async fn delete_persistent_message(
-    db: impl MySqlExecutor<'_> + Copy,
+    db: impl PgExecutor<'_> + Copy,
     http: impl http::CacheHttp,
-    channel_id: u64,
+    channel_id: ID,
     series: Series,
 ) -> Result<(), Error> {
     let msg = sqlx::query_as!(
         BotMessage,
-        "SELECT * from messages WHERE kind = ? and channel = ? AND series = ?",
-        MessageKind::Persistent,
-        channel_id,
-        series
+        "SELECT * from messages WHERE kind = $1 and channel = $2 AND series = $3",
+        "Persistent",
+        channel_id.i64(),
+        series.str()
     )
     .fetch_optional(db)
     .await?;
@@ -44,7 +44,7 @@ pub async fn delete_persistent_message(
 
     match http
         .http()
-        .delete_message(channel_id.into(), msg.message.into(), None)
+        .delete_message(channel_id.u64().into(), msg.message.u64().into(), None)
         .await
     {
         Ok(_) => {},
@@ -63,7 +63,7 @@ pub async fn delete_persistent_message(
         },
     }
 
-    sqlx::query!("DELETE FROM messages WHERE id = ?", msg.id)
+    sqlx::query!("DELETE FROM messages WHERE id = $1", msg.id)
         .execute(db)
         .await?;
 
@@ -72,7 +72,7 @@ pub async fn delete_persistent_message(
 
 pub async fn check_notify_session<'a>(
     weekend: &'a Weekend<'_>,
-    pool: &sqlx::MySqlPool,
+    pool: impl PgExecutor<'_> + Copy,
 ) -> Result<Option<&'a Session>, Error> {
     for session in weekend.sessions.iter() {
         // Only notify sessions that actually want to be notified!
@@ -102,17 +102,17 @@ pub async fn check_notify_session<'a>(
 }
 
 pub async fn get_persistent_message(
-    db: impl MySqlExecutor<'_>,
+    db: impl PgExecutor<'_>,
     http: impl CacheHttp,
-    channel_id: u64,
+    channel_id: ID,
     series: Series,
 ) -> Result<Option<(BotMessage, serenity::all::Message)>, Error> {
     let message: Option<BotMessage> = sqlx::query_as!(
         BotMessage,
-        "SELECT * FROM messages WHERE kind = ? AND channel = ? AND series = ?",
-        MessageKind::Persistent,
-        channel_id,
-        series
+        "SELECT * FROM messages WHERE kind = $1 AND channel = $2 AND series = $3",
+        "Persistent",
+        channel_id.i64(),
+        series.str()
     )
     .fetch_optional(db)
     .await?;
@@ -123,7 +123,7 @@ pub async fn get_persistent_message(
 
     let discord_msg = match http
         .http()
-        .get_message(channel_id.into(), message.message.into())
+        .get_message(channel_id.u64().into(), message.message.u64().into())
         .await
     {
         Ok(msg) => msg,
@@ -143,13 +143,13 @@ pub async fn get_persistent_message(
 }
 
 pub async fn runner(
-    pool: &sqlx::MySqlPool,
+    pool: &sqlx::PgPool,
     http: &Http,
-    channel_id: u64,
+    channel_id: ID,
     role_id: u64,
     series: Series,
     cat: &[u8],
-    hash: &mut u32,
+    hash: &mut i32,
 ) {
     let weekend = match get_current_weekend(pool, series).await {
         Ok(w) => w,
@@ -228,12 +228,12 @@ pub async fn runner(
 }
 
 pub async fn mark_weekend_done(
-    id: u32,
-    pool: &sqlx::MySqlPool,
+    id: i32,
+    pool: impl PgExecutor<'_>,
 ) -> Result<(), Error> {
     match sqlx::query!(
-        "UPDATE weekends set status = ? WHERE id = ?",
-        WeekendStatus::Done,
+        "UPDATE weekends set status = $1 WHERE id = $2",
+        "Done",
         id
     )
     .execute(pool)
@@ -252,18 +252,18 @@ pub async fn mark_weekend_done(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn send_message(
-    db: impl MySqlExecutor<'_>,
+    db: impl PgExecutor<'_>,
     weekend: &Weekend<'_>,
     session: &Session,
     http: &Http,
-    channel_id: u64,
+    channel_id: ID,
     role_id: u64,
     series: Series,
     cat: &[u8],
 ) -> Result<MessageId, Error> {
     let session_name = session.pretty_name();
     let attach = CreateAttachment::bytes(cat, "bongocat.mp4");
-    let message = ChannelId::new(channel_id)
+    let message = ChannelId::new(channel_id.u64())
         .send_message(
             http,
             CreateMessage::new()
@@ -277,13 +277,14 @@ pub async fn send_message(
                 .add_file(attach),
         )
         .await?;
+    let msg_id: ID = message.id.get().into();
     sqlx::query!(
         "INSERT INTO messages 
- (channel, message, kind, series) VALUES (?, ?, ?, ?)",
-        channel_id,
-        message.id.get(),
-        MessageKind::Notification,
-        series
+ (channel, message, kind, series) VALUES ($1, $2, $3, $4)",
+        channel_id.i64(),
+        msg_id.i64(),
+        "Notification",
+        series.str()
     )
     .execute(db)
     .await?;
@@ -304,12 +305,12 @@ Times are in your timezone"#
 }
 
 pub async fn mark_session_notified(
-    id: u32,
-    pool: &sqlx::MySqlPool,
+    id: i32,
+    pool: impl PgExecutor<'_>,
 ) -> Result<(), Error> {
     match sqlx::query!(
-        "UPDATE sessions set status = ? WHERE id = ?",
-        SessionStatus::Done,
+        "UPDATE sessions set status = $1 WHERE id = $2",
+        "Done",
         id
     )
     .execute(pool)
@@ -327,14 +328,14 @@ pub async fn mark_session_notified(
 }
 
 pub async fn remove_old_notifs(
-    db: impl MySqlExecutor<'_> + Copy,
+    db: impl PgExecutor<'_> + Copy,
     http: impl http::CacheHttp,
 ) -> Result<(), Error> {
     let messages: Vec<BotMessage> = sqlx::query_as!(
         BotMessage,
         "SELECT * from messages 
- WHERE kind = ? AND TIMESTAMPDIFF(Minute, messages.posted, NOW()) > 30",
-        MessageKind::Notification
+ WHERE kind = $1 AND messages.posted > now() + interval '30 minutes'",
+        "Notification"
     )
     .fetch_all(db)
     .await?;
@@ -342,8 +343,8 @@ pub async fn remove_old_notifs(
     let mut futures = vec![];
     for message in messages.into_iter() {
         futures.push(http.http().delete_message(
-            message.channel.into(),
-            message.message.into(),
+            message.channel.u64().into(),
+            message.message.u64().into(),
             None,
         ));
     }
@@ -358,8 +359,8 @@ pub async fn remove_old_notifs(
 
     sqlx::query!(
         "DELETE FROM messages 
-WHERE kind = ? AND TIMESTAMPDIFF(Minute, messages.posted, NOW()) > 30",
-        MessageKind::Notification
+WHERE kind = $1 AND posted > now() + interval '30 minutes'",
+        "Notification"
     )
     .execute(db)
     .await?;
@@ -368,13 +369,13 @@ WHERE kind = ? AND TIMESTAMPDIFF(Minute, messages.posted, NOW()) > 30",
 }
 
 pub async fn post_new_persistent(
-    db: impl MySqlExecutor<'_> + Copy,
+    db: impl PgExecutor<'_> + Copy,
     http: impl http::CacheHttp,
     weekend: &Weekend<'_>,
-    channel_id: u64,
+    channel_id: ID,
     series: Series,
 ) -> Result<(BotMessage, serenity::all::Message), Error> {
-    let channel = ChannelId::new(channel_id);
+    let channel = ChannelId::new(channel_id.u64());
     let message = channel
         .send_message(
             http,
@@ -385,30 +386,35 @@ pub async fn post_new_persistent(
 
     let mut hasher = DefaultHasher::new();
     weekend.hash(&mut hasher);
-    let hash = hasher.finish();
+    let hash: ID = hasher.finish().into();
 
-    let new_obj: MySqlQueryResult = sqlx::query!(
+    struct Id {
+        id: i64,
+    }
+    let msg_id: ID = message.id.get().into();
+    let new_obj: Id = sqlx::query_as!(
+        Id,
         "INSERT INTO messages (
             channel,
             message,
             kind,
             hash,
             series
-            ) VALUES (?, ?, ?, cast(? as UNSIGNED), ?)",
-        channel_id,
-        message.id.get(),
-        MessageKind::Persistent,
-        hash,
-        series
+            ) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        channel_id.i64(),
+        msg_id.i64(),
+        "Persistent",
+        hash.i64(),
+        series.str()
     )
-    .execute(db)
+    .fetch_one(db)
     .await?;
 
     let new_msg = BotMessage {
-        id: new_obj.last_insert_id() as u32,
+        id: new_obj.id,
         channel: channel_id,
-        message: message.id.get(),
-        hash: Some(hash),
+        message: message.id.get().into(),
+        hash,
         kind: MessageKind::Persistent,
         posted: Utc::now(),
         series,
@@ -417,12 +423,12 @@ pub async fn post_new_persistent(
 }
 
 pub async fn update_persistent_message(
-    db: impl MySqlExecutor<'_> + Copy,
+    db: impl PgExecutor<'_> + Copy,
     http: impl http::CacheHttp,
     weekend: &Weekend<'_>,
     db_msg: BotMessage,
     mut dc_msg: serenity::all::Message,
-    hash: u64,
+    hash: ID,
 ) -> Result<(), Error> {
     dc_msg
         .edit(
@@ -432,8 +438,8 @@ pub async fn update_persistent_message(
         )
         .await?;
     sqlx::query!(
-        "UPDATE messages SET hash = cast(? as UNSIGNED) WHERE id = ?",
-        hash,
+        "UPDATE messages SET hash = $1 WHERE id = $2",
+        hash.i64(),
         db_msg.id
     )
     .execute(db)
@@ -442,10 +448,10 @@ pub async fn update_persistent_message(
 }
 
 pub async fn create_persistent_message(
-    db: impl MySqlExecutor<'_> + Copy,
+    db: impl PgExecutor<'_> + Copy,
     http: impl http::CacheHttp,
     weekend: &Weekend<'_>,
-    channel_id: u64,
+    channel_id: ID,
     series: Series,
 ) -> Result<(), Error> {
     let msg = get_persistent_message(db, &http, channel_id, series).await?;
@@ -459,8 +465,8 @@ pub async fn create_persistent_message(
 
     let mut hasher = DefaultHasher::new();
     weekend.hash(&mut hasher);
-    let hash = hasher.finish();
-    if db_msg.hash.is_some_and(|h| h == hash) {
+    let hash: ID = hasher.finish().into();
+    if db_msg.hash == hash {
         return Ok(());
     }
     update_persistent_message(db, http, weekend, db_msg, dc_msg, hash).await?;

@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fmt::Display, hash::Hash};
 
+use crate::util::ID;
+
 #[derive(Serialize, Deserialize, Clone, Copy, sqlx::Type, Debug, Hash)]
 pub enum Series {
     F1,
@@ -9,6 +11,12 @@ pub enum Series {
     F3,
     F1Academy,
     Unsupported,
+}
+
+impl Series {
+    pub fn str(self) -> &'static str {
+        self.into()
+    }
 }
 
 impl From<String> for Series {
@@ -19,6 +27,18 @@ impl From<String> for Series {
             "F3" => Self::F3,
             "F1Academy" => Self::F1Academy,
             _ => Self::Unsupported,
+        }
+    }
+}
+
+impl From<Series> for &str {
+    fn from(val: Series) -> Self {
+        match val {
+            Series::F1 => "F1",
+            Series::F2 => "F2",
+            Series::F3 => "F3",
+            Series::F1Academy => "F1Academy",
+            _ => panic!("Unsupported shit"),
         }
     }
 }
@@ -49,6 +69,16 @@ impl From<String> for WeekendStatus {
             "Cancelled" => Self::Cancelled,
             "Done" => Self::Done,
             _ => Self::Done,
+        }
+    }
+}
+
+impl From<WeekendStatus> for &str {
+    fn from(val: WeekendStatus) -> Self {
+        match val {
+            WeekendStatus::Open => "Open",
+            WeekendStatus::Cancelled => "Cancelled",
+            WeekendStatus::Done => "Done",
         }
     }
 }
@@ -92,6 +122,22 @@ impl From<String> for SessionKind {
     }
 }
 
+impl From<SessionKind> for &str {
+    fn from(val: SessionKind) -> Self {
+        match val {
+            SessionKind::Custom => "Custom",
+            SessionKind::Practice => "Practice",
+            SessionKind::Qualifying => "Qualifying",
+            SessionKind::Race => "Race",
+            SessionKind::SprintRace => "Sprint",
+            SessionKind::SprintQuali => "SprintQuali",
+            SessionKind::PreSeasonTest => "PreSeasonTest",
+            SessionKind::FeatureRace => "FeatureRace",
+            SessionKind::Unsupported => panic!("Unsupported session kind"),
+        }
+    }
+}
+
 impl Display for SessionKind {
     fn fmt(
         &self,
@@ -128,6 +174,18 @@ impl From<SessionStatus> for u8 {
             SessionStatus::Cancelled => 2,
             SessionStatus::Done => 3,
             SessionStatus::Unsupported => 4,
+        }
+    }
+}
+
+impl From<SessionStatus> for &str {
+    fn from(val: SessionStatus) -> Self {
+        match val {
+            SessionStatus::Open => "Open",
+            SessionStatus::Delayed => "Delayed",
+            SessionStatus::Cancelled => "Cancelled",
+            SessionStatus::Done => "Done",
+            SessionStatus::Unsupported => panic!("Unsupported session status"),
         }
     }
 }
@@ -180,27 +238,36 @@ impl From<u8> for NotificationSetting {
     }
 }
 
+impl From<NotificationSetting> for &str {
+    fn from(val: NotificationSetting) -> Self {
+        match val {
+            NotificationSetting::Notify => "Notify",
+            NotificationSetting::Ignore => "Ignore",
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Hash)]
 pub struct Session {
-    pub id: u32,
-    pub weekend: u32,
+    pub id: i32,
+    pub weekend: i32,
     pub kind: SessionKind,
     pub status: SessionStatus,
     pub notify: NotificationSetting,
     pub duration: i64,
     pub date: DateTime<Utc>,
-    pub number: Option<u8>,
+    pub number: Option<i16>,
     pub title: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Weekend<'a> {
-    pub id: u32,
+    pub id: i32,
     pub series: Series,
     pub name: Cow<'a, str>,
     pub icon: Cow<'a, str>,
     pub sessions: Vec<Session>,
-    pub year: u16,
+    pub year: i16,
     pub start_date: DateTime<Utc>,
     pub status: WeekendStatus,
 }
@@ -321,13 +388,24 @@ impl From<String> for MessageKind {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+impl From<MessageKind> for &str {
+    fn from(val: MessageKind) -> Self {
+        match val {
+            MessageKind::Persistent => "Persistent",
+            MessageKind::Notification => "Notification",
+            MessageKind::Calendar => "Calendar",
+            MessageKind::Unsupported => panic!("Unsupported message"),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct BotMessage {
-    pub id: u32,
-    pub channel: u64,
-    pub message: u64,
+    pub id: i64,
+    pub channel: ID,
+    pub message: ID,
     pub kind: MessageKind,
     pub posted: DateTime<Utc>,
-    pub hash: Option<u64>,
+    pub hash: ID,
     pub series: Series,
 }

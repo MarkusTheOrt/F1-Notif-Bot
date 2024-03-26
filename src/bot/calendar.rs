@@ -10,52 +10,54 @@ use serenity::{
     futures::future::join_all,
     http::{CacheHttp, Http},
 };
-use sqlx::{Acquire, MySqlExecutor, MySqlPool};
+use sqlx::PgExecutor;
 
 use crate::{
     error::Error,
     model::{BotMessage, MessageKind, Series, Weekend},
-    util::{get_all_weekends, get_weekends_without_sessions},
+    util::{get_all_weekends, get_weekends_without_sessions, ID},
 };
 
 pub async fn get_calendar_notifs(
-    pool: impl MySqlExecutor<'_>,
-    channel: u64,
+    pool: impl PgExecutor<'_>,
+    channel: ID,
     series: Series,
 ) -> Result<Vec<BotMessage>, sqlx::Error> {
     sqlx::query_as!(
         BotMessage,
         "SELECT * FROM messages 
-WHERE kind = ? AND channel = ? AND series = ?
+WHERE kind = $1 AND channel = $2 AND series = $3
 ORDER by posted ASC",
-        MessageKind::Calendar,
-        channel,
-        series
+        <crate::model::MessageKind as Into::<&str>>::into(
+            MessageKind::Calendar
+        ),
+        channel.i64(),
+        <crate::model::Series as Into::<&str>>::into(series)
     )
     .fetch_all(pool)
     .await
 }
 
 pub async fn reserve_calendar_message(
-    pool: impl MySqlExecutor<'_>,
+    pool: impl PgExecutor<'_>,
     http: &Http,
-    channel: u64,
+    channel: ID,
     series: Series,
 ) -> Result<(), Error> {
-    let channel_id = ChannelId::new(channel);
+    let channel_id = ChannelId::new(channel.u64());
     let msg = channel_id
         .send_message(
             http,
             CreateMessage::new().content("*Reserved for Calendar*"),
         )
         .await?;
-    let id = msg.id.get();
+    let id: ID = msg.id.get().into();
     sqlx::query!(
-        "INSERT into messages (channel, message, kind, series) VALUES (?, ?, ?, ?)",
-        channel,
-        id,
-        MessageKind::Calendar,
-        series
+        "INSERT into messages (channel, message, kind, series, hash) VALUES ($1, $2, $3, $4, 0)",
+        channel.i64(),
+        id.i64(),
+        <crate::model::MessageKind as Into::<&str>>::into(MessageKind::Calendar),
+        <crate::model::Series as Into::<&str>>::into(series)
     )
     .execute(pool)
     .await?;
@@ -63,27 +65,17 @@ pub async fn reserve_calendar_message(
 }
 
 pub async fn populate_calendar(
-    pool: &MySqlPool,
+    pool: impl PgExecutor<'_> + Copy,
     http: &Http,
-    channel: u64,
+    channel: ID,
     series: Series,
 ) -> Result<(), Error> {
-    let mut connection = pool.acquire().await?;
-    let calendar =
-        get_weekends_without_sessions(connection.acquire().await?, series)
-            .await?;
-    let notifs =
-        get_calendar_notifs(connection.acquire().await?, channel, series)
-            .await?;
+    let calendar = get_weekends_without_sessions(pool, series).await?;
+    let notifs = get_calendar_notifs(pool, channel, series).await?;
     if notifs.len() < calendar.len() {
         for _ in notifs.len()..(calendar.len()) {
-            if let Err(why) = reserve_calendar_message(
-                connection.acquire().await?,
-                http,
-                channel,
-                series,
-            )
-            .await
+            if let Err(why) =
+                reserve_calendar_message(pool, http, channel, series).await
             {
                 eprintln!("Error posting message: {why}");
                 break;
@@ -98,9 +90,9 @@ pub async fn populate_calendar(
 }
 
 pub async fn update_calendar(
-    pool: &MySqlPool,
+    pool: impl PgExecutor<'_> + Copy,
     http: &Http,
-    channel: u64,
+    channel: ID,
     series: Series,
 ) -> Result<(), Error> {
     let mut calendar = get_all_weekends(pool, series).await?;
@@ -122,7 +114,7 @@ pub async fn update_calendar(
         weekend.hash(&mut hasher);
         let hash = hasher.finish();
         // skip message if its the same!
-        if msg.hash.is_some_and(|f| f == hash) {
+        if msg.hash.u64() == hash {
             continue;
         }
         futures.push(update_message(
@@ -131,7 +123,7 @@ pub async fn update_calendar(
             http,
             pool,
             weekend,
-            hash,
+            hash.into(),
         ));
     }
 
@@ -146,24 +138,26 @@ pub async fn update_calendar(
 }
 
 async fn update_message(
-    channel_id: u64,
-    message_id: u64,
+    channel_id: ID,
+    message_id: ID,
     http: impl CacheHttp,
-    db: impl MySqlExecutor<'_>,
+    db: impl PgExecutor<'_>,
     weekend: &Weekend<'_>,
-    hash: u64,
+    hash: ID,
 ) -> Result<(), Error> {
-    let mut message =
-        http.http().get_message(channel_id.into(), message_id.into()).await?;
+    let mut message = http
+        .http()
+        .get_message(channel_id.u64().into(), message_id.u64().into())
+        .await?;
 
     message
         .edit(http, EditMessage::new().content(format!("{weekend}")))
         .await?;
 
     sqlx::query!(
-        "UPDATE messages SET hash = cast(? as UNSIGNED) WHERE message = ?",
-        hash,
-        message_id
+        "UPDATE messages SET hash = $1 WHERE message = $2",
+        hash.i64(),
+        message_id.i64()
     )
     .execute(db)
     .await?;
