@@ -12,6 +12,7 @@ use serenity::{
     prelude::{CacheHttp, HttpError},
 };
 use sqlx::{mysql::MySqlQueryResult, MySqlExecutor};
+use tracing::error;
 
 use crate::{
     error::Error,
@@ -84,7 +85,7 @@ pub async fn check_notify_session<'a>(
             SessionStatus::Cancelled => continue,
             SessionStatus::Done => continue,
             SessionStatus::Unsupported => {
-                eprintln!("Found unsupported session in {}", weekend.name);
+                error!("Found unsupported session in {}", weekend.name);
                 continue;
             },
         }
@@ -155,7 +156,7 @@ pub async fn runner(
         Ok(w) => w,
         Err(why) => {
             if !matches!(why, Error::NotFound) {
-                eprintln!("Error getting session: {why}");
+                error!("Error getting session: {why}");
             }
             return;
         },
@@ -170,7 +171,7 @@ pub async fn runner(
     }
     if !has_open_sessions {
         if let Err(why) = mark_weekend_done(weekend.id, pool).await {
-            eprintln!("Error marking weekend as done: {why}");
+            error!("Error marking weekend as done: {why}");
         }
     }
 
@@ -180,7 +181,7 @@ pub async fn runner(
         if let Err(why) =
             delete_persistent_message(pool, http, channel_id, series).await
         {
-            eprintln!("Error deleting persistent message: {why}");
+            error!("Error deleting persistent message: {why}");
         }
     }
 
@@ -190,12 +191,12 @@ pub async fn runner(
         create_persistent_message(pool, http, &weekend, channel_id, series)
             .await
     {
-        eprintln!("Error creating persistent message: {why}");
+        error!("Error creating persistent message: {why}");
     }
 
     let session_to_notify = match check_notify_session(&weekend, pool).await {
         Err(why) => {
-            eprintln!("Error marking session as done: {why}");
+            error!("Error marking session as done: {why}");
             return;
         },
         Ok(Some(session)) => session,
@@ -207,7 +208,7 @@ pub async fn runner(
 
     // if the session cannot be marked as notified log the error and do not notify!
     if let Err(why) = mark_session_notified(session_to_notify.id, pool).await {
-        eprintln!("Error marking session as notified: {why}");
+        error!("Error marking session as notified: {why}");
         return;
     }
 
@@ -223,7 +224,7 @@ pub async fn runner(
     )
     .await
     {
-        eprintln!("Error sending message: {why}");
+        error!("Error sending message: {why}");
     }
 }
 
@@ -353,7 +354,7 @@ pub async fn remove_old_notifs(
         let Err(why) = future else {
             continue;
         };
-        eprintln!("Error removing message: {why}");
+        error!("Error removing message: {why}");
     }
 
     sqlx::query!(

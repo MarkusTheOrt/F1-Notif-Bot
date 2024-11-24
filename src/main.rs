@@ -15,6 +15,8 @@ use crate::{bot::Bot, util::handle_config_error};
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
+    tracing_subscriber::fmt().init();
+
     let mut config = match File::open("./config/config.toml") {
         Ok(config) => config,
         Err(why) => handle_config_error(why),
@@ -35,10 +37,11 @@ async fn main() -> Result<(), String> {
     };
 
     let db_options = MySqlConnectOptions::new()
-        .ssl_mode(sqlx::mysql::MySqlSslMode::VerifyCa)
         .username(&config.database.username)
         .password(&config.database.password)
-        .host(&config.database.url);
+        .host(&config.database.url)
+        .port(3306)
+        .database("fia-docs");
     let database = match MySqlPool::connect_with(db_options).await {
         Ok(db) => db,
         Err(why) => {

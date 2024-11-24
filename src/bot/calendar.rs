@@ -11,6 +11,7 @@ use serenity::{
     http::{CacheHttp, Http},
 };
 use sqlx::{Acquire, MySqlExecutor, MySqlPool};
+use tracing::error;
 
 use crate::{
     error::Error,
@@ -85,7 +86,7 @@ pub async fn populate_calendar(
             )
             .await
             {
-                eprintln!("Error posting message: {why}");
+                error!("Error posting message: {why}");
                 break;
             }
 
@@ -138,7 +139,7 @@ pub async fn update_calendar(
     let results = join_all(futures).await;
     for result in results.into_iter() {
         if let Err(why) = result {
-            eprintln!("Error updating message: \n\t`{why}`")
+            error!("Error updating message: \n\t`{why}`")
         }
     }
 

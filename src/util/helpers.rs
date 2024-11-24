@@ -4,17 +4,19 @@ use std::{
     process::exit,
 };
 
+use tracing::{error, info};
+
 use crate::{config::Config, error::Error};
 
 pub fn handle_config_error(why: std::io::Error) -> ! {
     if let io::ErrorKind::NotFound = why.kind() {
-        println!("Generated default config file, please update settings.");
+        info!("Generated default config file, please update settings.");
         if let Err(config_why) = generate_default_config() {
-            eprintln!("Error generating config: `{config_why}`")
+            error!("Error generating config: `{config_why}`")
         }
         exit(0x0100)
     } else {
-        eprintln!("Error reading config file: {why}");
+        info!("Error reading config file: {why}");
         exit(0x0100)
     }
 }
