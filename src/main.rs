@@ -1,7 +1,6 @@
 pub mod bot;
 pub mod config;
 pub mod error;
-pub mod model;
 pub mod util;
 
 use anyhow::anyhow;
@@ -66,12 +65,19 @@ async fn main() -> Result<(), String> {
 
     let config = Box::leak(Box::new(config));
 
+    let mut db_conn = database.acquire().await.unwrap();
+
     let bot = Bot {
         is_mainthread_running: AtomicBool::new(false),
         config,
-        database,
+        database: Box::leak(Box::new(database)),
         cat: cat_data.leak(),
     };
+
+    
+
+
+    return Ok(());
 
     let mut client = match ClientBuilder::new(
         &bot.config.discord.bot_token,
