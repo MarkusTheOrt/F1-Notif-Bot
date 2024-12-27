@@ -1,5 +1,9 @@
 use std::{
-    fs::File, future::Future, hash::Hasher, io::{self, Write}, process::exit
+    fs::File,
+    future::Future,
+    hash::Hasher,
+    io::{self, Write},
+    process::exit,
 };
 
 use f1_bot_types::{Message, MessageKind, Series};
@@ -75,10 +79,18 @@ pub async fn create_new_calendar_message(
             CreateMessage::new().content("*Reserved for Future use.*"),
         )
         .await?;
-    
-    sqlx::query!("INSERT INTO messages 
+
+    sqlx::query!(
+        "INSERT INTO messages 
 (channel, message, kind, series) 
-VALUES (?, ?, ?, ?)", channel.to_string(), new_message.id.to_string(), MessageKind::Calendar.i8(), series.i8()).execute(conn).await?;
+VALUES (?, ?, ?, ?)",
+        channel.to_string(),
+        new_message.id.to_string(),
+        MessageKind::Calendar.i8(),
+        series.i8()
+    )
+    .execute(conn)
+    .await?;
 
     Ok(())
 }
@@ -98,23 +110,24 @@ pub async fn create_calendar(
     series: Series,
     channel: u64,
 ) -> Result<(), Error> {
-    let messages = calendar_messages(conn, series).await?;
+    let messages = fetch_calendar_messages(conn, series).await?;
     let weekends = full_weekends_for_series(conn, series).await?;
     match messages.len().cmp(&weekends.len()) {
         std::cmp::Ordering::Less => {
             let diff = weekends.len() - messages.len();
             for _ in 0..diff {
-                create_new_calendar_message(conn, &http, series, channel).await?;
+                create_new_calendar_message(conn, &http, series, channel)
+                    .await?;
             }
             return Ok(());
         },
         std::cmp::Ordering::Greater => {
             let diff = messages.len() - weekends.len();
             for _ in 0..diff {
-                delete_latest_calendar_message(conn, &http, series, channel).await?;
+                delete_latest_calendar_message(conn, &http, series, channel)
+                    .await?;
             }
-           return Ok(());
-
+            return Ok(());
         },
         std::cmp::Ordering::Equal => {},
     }
@@ -132,10 +145,8 @@ pub async fn create_calendar(
                 if hash != new_hash.to_string() {
                     // @TODO:[Markus]: Update message here
                 }
-            }
+            },
         }
-        
-
     }
 
     Ok(())

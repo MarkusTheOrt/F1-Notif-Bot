@@ -1,7 +1,10 @@
 pub mod calendar;
 pub mod notifs;
 
-use crate::{config::Config, util::{check_expired_messages, delete_message, expired_messages}};
+use crate::{
+    config::Config,
+    util::{check_expired_messages, delete_message, expired_messages},
+};
 use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
@@ -55,8 +58,10 @@ impl EventHandler for Bot {
 
         tokio::spawn(async move {
             loop {
-                if let Err(why) = check_expired_messages(db_conn.as_mut(), &http).await {
-                        error!("{why}");
+                if let Err(why) =
+                    check_expired_messages(db_conn.as_mut(), &http).await
+                {
+                    error!("{why}");
                 };
             }
         });
