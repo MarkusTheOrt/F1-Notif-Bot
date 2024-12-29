@@ -479,7 +479,7 @@ dependencies = [
 [[package]]
 name = "f1-bot-types"
 version = "0.1.0"
-source = "git+https://github.com/MarkusTheOrt/f1-bot-types#e505d6e15b5c43bc307b062fe281011db0dba84f"
+source = "git+https://codeberg.org/MTO/f1-bot-types#e505d6e15b5c43bc307b062fe281011db0dba84f"
 dependencies = [
  "chrono",
  "notifbot-macros",

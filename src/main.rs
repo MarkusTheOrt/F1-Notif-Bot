@@ -4,10 +4,7 @@ pub mod error;
 pub mod util;
 
 use anyhow::anyhow;
-use f1_bot_types::Series;
 use sqlx::{mysql::MySqlConnectOptions, MySqlPool};
-use tracing::info;
-use util::fetch_next_full_weekend_for_series;
 use std::{fs::File, io::Read, sync::atomic::AtomicBool};
 
 use config::Config;
@@ -68,11 +65,6 @@ async fn main() -> Result<(), String> {
 
     let config = Box::leak(Box::new(config));
 
-    let mut db_conn = database.acquire().await.unwrap();
-
-    let next_weekend = fetch_next_full_weekend_for_series(db_conn.as_mut(), Series::F1).await.unwrap();
-    info!("Found next weekend: {next_weekend:#?}");
-
     let bot = Bot {
         is_mainthread_running: AtomicBool::new(false),
         config,
@@ -80,8 +72,6 @@ async fn main() -> Result<(), String> {
         cat: cat_data.leak(),
     };
 
-    _ = bot;
-    return Ok(());
 
     let mut client = match ClientBuilder::new(
         &bot.config.discord.bot_token,

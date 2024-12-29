@@ -14,6 +14,9 @@ pub enum Error {
     Serenity(serenity::Error),
     Sqlx(sqlx::Error),
     NotFound,
+    NotSameLen,
+    ParseInt(std::num::ParseIntError),
+    NNF(Box<dyn StdError>),
 }
 
 impl From<sqlx::Error> for Error {
@@ -40,6 +43,18 @@ impl From<serenity::Error> for Error {
     }
 }
 
+impl From<std::num::ParseIntError> for Error {
+    fn from(value: std::num::ParseIntError) -> Self {
+        Error::ParseInt(value)
+    }
+}
+
+impl From<Box< dyn StdError>> for Error {
+    fn from(value: Box<dyn StdError>) -> Self {
+        Error::NNF(value)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(
         &self,
@@ -51,6 +66,9 @@ impl fmt::Display for Error {
             Self::Sqlx(inner) => fmt::Display::fmt(&inner, f),
             Self::Serenity(inner) => fmt::Display::fmt(&inner, f),
             Self::NotFound => f.write_str("Not Found (LIB Error)"),
+            Self::NotSameLen => f.write_str("Two Iterators are not the same len."),
+            Self::ParseInt(inner) => fmt::Display::fmt(&inner, f),
+            Self::NNF(inner) => fmt::Display::fmt(&inner, f),
         }
     }
 }
@@ -63,6 +81,9 @@ impl StdError for Error {
             Self::Serenity(inner) => Some(inner),
             Self::Sqlx(inner) => Some(inner),
             Self::NotFound => None,
+            Self::NotSameLen => None,
+            Self::ParseInt(inner) => Some(inner),
+            Self::NNF(inner) => inner.source(),
         }
     }
 }

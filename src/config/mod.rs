@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use f1_bot_types::Series;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -8,7 +9,7 @@ pub struct Config<'a> {
     pub database: DatabaseConfig<'a>,
 }
 
-impl<'a> Config<'a> {
+impl Config<'_> {
     pub fn db_string(&self) -> String {
         format!(
             "mysql://{}:{}@{}/{}",
@@ -17,6 +18,24 @@ impl<'a> Config<'a> {
             self.database.url,
             self.database.database
         )
+    }
+
+    pub fn role(&self, series: Series) -> u64 {
+        match series {
+            Series::F1 => self.discord.f1_role,
+            Series::F2 => self.discord.f2_role,
+            Series::F3 => self.discord.f3_role,
+            Series::F1Academy => self.discord.f1a_role,
+        }
+    }
+
+    pub fn channel(&self, series: Series) -> u64 {
+        match series {
+            Series::F1 => self.discord.f1_channel,
+            Series::F2 => self.discord.f2_channel,
+            Series::F3 => self.discord.f3_channel,
+            Series::F1Academy => self.discord.f1a_channel,
+        }
     }
 }
 

@@ -30,7 +30,7 @@ pub async fn fetch_weekend_for_series(
 ) -> Result<Vec<Weekend>, sqlx::Error> {
     sqlx::query_as!(
         Weekend,
-        "SELECT * FROM weekends WHERE series = ?",
+        "SELECT * FROM weekends WHERE series = ? ORDER BY start_date ASC",
         series.i8()
     )
     .fetch_all(db_conn)
@@ -77,7 +77,7 @@ impl Hash for FullWeekend {
     }
 }
 
-pub async fn full_weekends_for_series(
+pub async fn fetch_full_weekends_for_series(
     db_conn: &mut MySqlConnection,
     series: Series,
 ) -> Result<Vec<FullWeekend>, sqlx::Error> {
@@ -192,7 +192,7 @@ pub async fn fetch_calendar_messages(
 ) -> Result<Vec<Message>, sqlx::Error> {
     sqlx::query_as!(
         Message,
-        "SELECT * FROM messages WHERE kind = ? AND series = ?",
+        "SELECT * FROM messages WHERE kind = ? AND series = ? ORDER BY posted ASC",
         MessageKind::Calendar.i8(),
         series.i8()
     )
@@ -286,6 +286,20 @@ pub async fn mark_weekend_done(
         "UPDATE weekends SET status = ? WHERE id = ?",
         WeekendStatus::Done.i8(),
         weekend.id
+    )
+    .execute(db_conn)
+    .await
+    .map(|_f| ())
+}
+
+pub async fn mark_session_done(
+    db_conn: &mut MySqlConnection,
+    session: &Session,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "UPDATE sessions SET STATUS = ? WHERE id = ?",
+        SessionStatus::Finished.i8(),
+        session.id
     )
     .execute(db_conn)
     .await

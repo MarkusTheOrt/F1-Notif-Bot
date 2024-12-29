@@ -3,21 +3,25 @@ pub mod notifs;
 
 use crate::{
     config::Config,
-    util::{check_expired_messages, delete_message, expired_messages},
+    util::{
+        check_active_session, check_expired_messages, create_calendar,
+        create_new_notifications_msg_db, edit_calendar, mark_session_done,
+        send_notification,
+    },
 };
 use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
 
+use f1_bot_types::Series;
 use serenity::{
-    all::{ChannelId, GuildId, MessageId, Ready, StatusCode},
+    all::{GuildId, Ready},
     async_trait,
     prelude::*,
 };
 
-use sqlx::MySqlConnection;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 pub struct Bot {
     pub is_mainthread_running: AtomicBool,
@@ -57,12 +61,95 @@ impl EventHandler for Bot {
         let mut db_conn = pool.acquire().await.unwrap();
 
         tokio::spawn(async move {
+            let mut last_invocation = Instant::now();
             loop {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                // This gives us the ability to abort the task if we want or need to.
+                tokio::task::yield_now().await;
                 if let Err(why) =
                     check_expired_messages(db_conn.as_mut(), &http).await
                 {
-                    error!("{why}");
-                };
+                    error!("{why:#?}");
+                }
+
+                if Instant::now().duration_since(last_invocation).as_secs()
+                    > 60 * 5
+                {
+                    last_invocation = Instant::now();
+                    info!("Doing Calendar");
+                    for val in Series::F1.i8()..=Series::F1Academy.i8() {
+                        let series: Series = val.into();
+                        if let Err(why) = create_calendar(
+                            db_conn.as_mut(),
+                            &http,
+                            val.into(),
+                            conf.channel(series),
+                        )
+                        .await
+                        {
+                            error!("{why}");
+                        } else {
+                            info!("Created {series} Calendar");
+                        }
+
+                        if let Err(why) =
+                            edit_calendar(db_conn.as_mut(), &http, series).await
+                        {
+                            error!("{why:#?}");
+                        }
+                    }
+                }
+                for val in Series::F1.i8()..=Series::F1Academy.i8() {
+                    let series: Series = val.into();
+                    let role = conf.role(series);
+                    let channel = conf.channel(series);
+                    let session = match check_active_session(
+                        db_conn.as_mut(),
+                        series,
+                    )
+                    .await
+                    {
+                        Ok(s) => s,
+                        Err(why) => {
+                            error!("{why:#?}");
+                            continue;
+                        },
+                    };
+                    if let Some((w, s)) = session {
+                        let msg_id = match send_notification(
+                            &http,
+                            &w,
+                            &s,
+                            channel,
+                            cat,
+                            role
+                        )
+                        .await
+                        {
+                            Ok(d) => d,
+                            Err(why) => {
+                                error!("{why:#?}");
+                                continue;
+                            },
+                        };
+                        if let Err(why) =
+                            mark_session_done(db_conn.as_mut(), &s).await
+                        {
+                            error!("{why:#?}");
+                        }
+                        if let Err(why) = create_new_notifications_msg_db(
+                            db_conn.as_mut(),
+                            &s,
+                            series,
+                            channel,
+                            msg_id.into(),
+                        )
+                        .await
+                        {
+                            error!("{why:#?}");
+                        }
+                    }
+                }
             }
         });
     }
@@ -80,3 +167,4 @@ impl EventHandler for Bot {
         }
     }
 }
+
