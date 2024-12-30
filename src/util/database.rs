@@ -175,6 +175,35 @@ pub async fn fetch_weekend_messages(
     .await
 }
 
+pub async fn mark_weekend_message_for_series_expired(
+    db_conn: &mut MySqlConnection,
+    series: Series,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "UPDATE messages SET expiry = ? WHERE kind = ? AND series = ?",
+        Utc::now(),
+        MessageKind::Weekend.i8(),
+        series.i8()
+    )
+    .execute(db_conn)
+    .await
+    .map(|_f| ())
+}
+
+pub async fn fetch_weekend_message_for_series(
+    db_conn: &mut MySqlConnection,
+    series: Series,
+) -> Result<Option<Message>, sqlx::Error> {
+    sqlx::query_as!(
+        Message,
+        "SELECT * FROM messages WHERE kind = ? and series = ?",
+        MessageKind::Weekend.i8(),
+        series.i8()
+    )
+    .fetch_optional(db_conn)
+    .await
+}
+
 pub async fn expired_messages(
     db_conn: &mut MySqlConnection
 ) -> Result<Vec<Message>, sqlx::Error> {

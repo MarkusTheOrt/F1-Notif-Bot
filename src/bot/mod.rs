@@ -4,9 +4,7 @@ pub mod notifs;
 use crate::{
     config::Config,
     util::{
-        check_active_session, check_expired_messages, create_calendar,
-        create_new_notifications_msg_db, edit_calendar, mark_session_done,
-        send_notification,
+        check_active_session, check_expired_messages, check_expired_weekend, create_calendar, create_new_notifications_msg_db, edit_calendar, mark_session_done, mark_weekend_done, mark_weekend_message_for_series_expired, post_weekend_message, send_notification
     },
 };
 use std::{
@@ -147,6 +145,21 @@ impl EventHandler for Bot {
                         .await
                         {
                             error!("{why:#?}");
+                        }
+                        match check_expired_weekend(db_conn.as_mut(), &w, &s).await {
+                            Ok(Some(s)) => {
+                                if let Err(why) = mark_weekend_done(db_conn.as_mut(), &w).await {
+                                    error!("{why:#?}");
+                                    continue;
+                                }
+                                if let Err(why) = mark_weekend_message_for_series_expired(db_conn.as_mut(), s).await {
+                                    error!("{why:#?}");
+                                }
+                            },
+                            Ok(None) => {},
+                            Err(why) => {
+                                error!("{why:#?}");
+                            }
                         }
                     }
                 }

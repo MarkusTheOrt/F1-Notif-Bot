@@ -1,13 +1,16 @@
 use std::{
     fs::File,
-    hash::{Hash, Hasher},
+    hash::{DefaultHasher, Hash, Hasher},
     io::{self, Write},
     process::exit,
     time::Duration,
 };
 
 use chrono::Utc;
-use f1_bot_types::{Message, MessageKind, Series, Session, Weekend};
+use f1_bot_types::{
+    Message, MessageKind, Series, Session, SessionStatus, Weekend,
+    WeekendStatus,
+};
 use serenity::all::{
     CacheHttp, ChannelId, CreateAttachment, CreateMessage, EditMessage,
     MessageId, StatusCode,
@@ -324,4 +327,71 @@ pub async fn send_notification(
         )
         .await?;
     Ok(new_msg.id)
+}
+
+pub async fn check_expired_weekend(
+    db_conn: &mut MySqlConnection,
+    weekend: &Weekend,
+    session: &Session,
+) -> Result<Option<Series>, sqlx::Error> {
+    let weekend = match fetch_full_weekend(db_conn, weekend.id).await? {
+        Some(d) => d,
+        None => return Ok(None),
+    };
+
+    if weekend.weekend.status == WeekendStatus::Done {
+        return Ok(None);
+    }
+
+    if weekend.sessions.into_iter().all(|f| {
+        matches!(
+            if f.id == session.id {
+                session.status
+            } else {
+                f.status
+            },
+            SessionStatus::Finished | SessionStatus::Cancelled
+        )
+    }) {
+        Ok(Some(weekend.weekend.series))
+    } else {
+        Ok(None)
+    }
+}
+
+pub async fn post_weekend_message(
+    http: impl CacheHttp,
+    weekend: &FullWeekend,
+    channel: u64,
+) -> Result<MessageId, serenity::Error> {
+    let (weekend, sessions) = (&weekend.weekend, &weekend.sessions);
+    let mut weekend_str = format!("# {}{}\n", weekend.icon, weekend.name);
+    for session in sessions {
+        let tz = session.start_date.timestamp();
+        let crossed_out =
+            match Utc::now().timestamp() > tz + session.duration as i64 {
+                true => "~~",
+                false => "",
+            };
+        weekend_str += &format!(
+            "> {2}{:>12} <t:{}:f> (<t:{1}:R>){2}",
+            session.title, tz, crossed_out
+        );
+    }
+    ChannelId::new(channel)
+        .send_message(http, CreateMessage::new())
+        .await
+        .map(|f| f.id)
+}
+
+pub async fn insert_weekend_message(
+    db_conn: &mut MySqlConnection,
+    channel: u64,
+    message: u64,
+    weekend: &FullWeekend,
+) -> Result<(), sqlx::Error> {
+    let mut hasher = DefaultHasher::new();
+    weekend.hash(&mut hasher);
+    let hash = hasher.finish();
+    sqlx::query!("INSERT INTO messages (channel, message, hash, kind) VALUES (?, ?, ?, ?)", channel, message, hash, MessageKind::Weekend.i8()).execute(db_conn).await.map(|_f| ())
 }
