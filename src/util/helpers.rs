@@ -164,19 +164,45 @@ pub async fn create_calendar(
         use std::hash::Hash;
         match message.hash {
             None => {
-                // @TODO:[Markus]: Update message here
+                let mut hasher = DefaultHasher::new();
+                weekend.hash(&mut hasher);
+                let new_hash = hasher.finish();
+                update_calendar_message(
+                    &http,
+                    &weekend,
+                    channel,
+                    message.message.parse()?,
+                )
+                .await?;
+                update_message_hash(conn, message.id, new_hash).await?;
             },
             Some(hash) => {
                 let mut hasher = std::hash::DefaultHasher::new();
                 weekend.hash(&mut hasher);
                 let new_hash = hasher.finish();
                 if hash != new_hash.to_string() {
-                    // @TODO:[Markus]: Update message here
+                    update_calendar_message(
+                        &http,
+                        &weekend,
+                        channel,
+                        message.message.parse()?,
+                    )
+                    .await?;
+                    update_message_hash(conn, message.id, new_hash).await?;
                 }
             },
         }
     }
 
+    Ok(())
+}
+
+pub async fn update_calendar_message(
+    http: impl CacheHttp,
+    weekend: &FullWeekend,
+    channel: u64,
+    message: u64,
+) -> Result<(), serenity::Error> {
     Ok(())
 }
 
@@ -364,22 +390,11 @@ pub async fn post_weekend_message(
     weekend: &FullWeekend,
     channel: u64,
 ) -> Result<MessageId, serenity::Error> {
-    let (weekend, sessions) = (&weekend.weekend, &weekend.sessions);
-    let mut weekend_str = format!("# {}{}\n", weekend.icon, weekend.name);
-    for session in sessions {
-        let tz = session.start_date.timestamp();
-        let crossed_out =
-            match Utc::now().timestamp() > tz + session.duration as i64 {
-                true => "~~",
-                false => "",
-            };
-        weekend_str += &format!(
-            "> {2}{:>12} <t:{}:f> (<t:{1}:R>){2}",
-            session.title, tz, crossed_out
-        );
-    }
     ChannelId::new(channel)
-        .send_message(http, CreateMessage::new())
+        .send_message(
+            http,
+            CreateMessage::new().content(weekend.weekend_msg_str(true)),
+        )
         .await
         .map(|f| f.id)
 }
@@ -393,5 +408,22 @@ pub async fn insert_weekend_message(
     let mut hasher = DefaultHasher::new();
     weekend.hash(&mut hasher);
     let hash = hasher.finish();
-    sqlx::query!("INSERT INTO messages (channel, message, hash, kind) VALUES (?, ?, ?, ?)", channel, message, hash, MessageKind::Weekend.i8()).execute(db_conn).await.map(|_f| ())
+    sqlx::query!("INSERT INTO messages (channel, message, hash, kind, series) VALUES (?, ?, ?, ?, ?)", channel, message, hash, MessageKind::Weekend.i8(), weekend.weekend.series.i8()).execute(db_conn).await.map(|_f| ())
+}
+
+pub async fn update_weekend_message(
+    http: impl CacheHttp,
+    weekend: &FullWeekend,
+    channel: u64,
+    message: u64,
+) -> Result<(), crate::error::Error> {
+    ChannelId::new(channel)
+        .edit_message(
+            http,
+            message,
+            EditMessage::new().content(weekend.weekend_msg_str(true)),
+        )
+        .await
+        .map(|_f| ())?;
+    Ok(())
 }

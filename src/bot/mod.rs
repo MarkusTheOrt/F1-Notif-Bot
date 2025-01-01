@@ -4,10 +4,17 @@ pub mod notifs;
 use crate::{
     config::Config,
     util::{
-        check_active_session, check_expired_messages, check_expired_weekend, create_calendar, create_new_notifications_msg_db, edit_calendar, mark_session_done, mark_weekend_done, mark_weekend_message_for_series_expired, post_weekend_message, send_notification
+        check_expired_messages, check_expired_weekend, create_calendar,
+        create_new_notifications_msg_db, edit_calendar,
+        fetch_next_full_weekend_for_series, fetch_weekend_message_for_series,
+        insert_weekend_message, mark_message_expired, mark_session_done,
+        mark_weekend_done, mark_weekend_message_for_series_expired,
+        post_weekend_message, send_notification, update_message_hash,
+        update_weekend_message,
     },
 };
 use std::{
+    hash::{DefaultHasher, Hash, Hasher},
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
@@ -59,6 +66,7 @@ impl EventHandler for Bot {
         let mut db_conn = pool.acquire().await.unwrap();
 
         tokio::spawn(async move {
+            let last_weekend_ids = [0, 0, 0, 0u64];
             let mut last_invocation = Instant::now();
             loop {
                 tokio::time::sleep(Duration::from_secs(5)).await;
@@ -101,66 +109,215 @@ impl EventHandler for Bot {
                     let series: Series = val.into();
                     let role = conf.role(series);
                     let channel = conf.channel(series);
-                    let session = match check_active_session(
+                    #[allow(unused)]
+                    let mut last_weekend_id = last_weekend_ids[val as usize];
+                    let full_weekend = match fetch_next_full_weekend_for_series(
                         db_conn.as_mut(),
                         series,
                     )
                     .await
                     {
-                        Ok(s) => s,
+                        Ok(Some(d)) => d,
+                        Ok(None) => {
+                            let weekend_msg = match fetch_weekend_message_for_series(db_conn.as_mut(), series).await {
+                                Ok(Some(msg)) => msg,
+                                Ok(None) => continue,
+                                Err(why) => {
+                                    error!("{why:#?}");
+                                    continue;
+                                }
+                            };
+                            if let Err(why) = mark_message_expired(db_conn.as_mut(), weekend_msg.id, None).await {
+                                error!("{why:#?}");
+                            }
+                            continue;
+                        },
                         Err(why) => {
                             error!("{why:#?}");
                             continue;
                         },
                     };
-                    if let Some((w, s)) = session {
-                        let msg_id = match send_notification(
-                            &http,
-                            &w,
-                            &s,
-                            channel,
-                            cat,
-                            role
-                        )
-                        .await
-                        {
-                            Ok(d) => d,
-                            Err(why) => {
+                    if last_weekend_id == 0 {
+                        last_weekend_id = full_weekend.weekend.id;
+                    }
+                    if full_weekend.is_done() {
+                            if let Err(why) = mark_weekend_done(
+                                db_conn.as_mut(),
+                                &full_weekend.weekend,
+                            )
+                            .await
+                            {
                                 error!("{why:#?}");
                                 continue;
-                            },
-                        };
-                        if let Err(why) =
-                            mark_session_done(db_conn.as_mut(), &s).await
-                        {
-                            error!("{why:#?}");
-                        }
-                        if let Err(why) = create_new_notifications_msg_db(
-                            db_conn.as_mut(),
-                            &s,
-                            series,
-                            channel,
-                            msg_id.into(),
-                        )
-                        .await
-                        {
-                            error!("{why:#?}");
-                        }
-                        match check_expired_weekend(db_conn.as_mut(), &w, &s).await {
-                            Ok(Some(s)) => {
-                                if let Err(why) = mark_weekend_done(db_conn.as_mut(), &w).await {
-                                    error!("{why:#?}");
-                                    continue;
-                                }
-                                if let Err(why) = mark_weekend_message_for_series_expired(db_conn.as_mut(), s).await {
-                                    error!("{why:#?}");
-                                }
-                            },
-                            Ok(None) => {},
-                            Err(why) => {
+                            }
+                            if let Err(why) =
+                                mark_weekend_message_for_series_expired(
+                                    db_conn.as_mut(),
+                                    series,
+                                )
+                                .await
+                            {
                                 error!("{why:#?}");
                             }
-                        }
+                    }
+
+                    match fetch_weekend_message_for_series(
+                        db_conn.as_mut(),
+                        series,
+                    )
+                    .await
+                    {
+                        Ok(Some(msg)) => {
+                            if let Some(hash) = msg.hash {
+                                let mut hasher = DefaultHasher::new();
+                                full_weekend.hash(&mut hasher);
+                                let new_hash = hasher.finish();
+                                if new_hash != hash.parse::<u64>().unwrap() {
+                                    if last_weekend_id
+                                        != full_weekend.weekend.id
+                                    {
+                                        if let Err(why) = mark_message_expired(
+                                            db_conn.as_mut(),
+                                            msg.id,
+                                            None,
+                                        )
+                                        .await
+                                        {
+                                            error!("{why:#?}");
+                                        }
+                                        last_weekend_id =
+                                            full_weekend.weekend.id;
+                                        continue;
+                                    }
+                                    if let Err(why) = update_weekend_message(
+                                        &http,
+                                        &full_weekend,
+                                        channel,
+                                        msg.message.parse().unwrap(),
+                                    )
+                                    .await
+                                    {
+                                        error!("{why:#?}");
+                                    }
+                                    if let Err(why) = update_message_hash(
+                                        db_conn.as_mut(),
+                                        msg.id,
+                                        new_hash,
+                                    )
+                                    .await
+                                    {
+                                        error!("{why:#?}");
+                                    }
+                                }
+                            } else {
+                                if last_weekend_id != full_weekend.weekend.id {
+                                    if let Err(why) = mark_message_expired(
+                                        db_conn.as_mut(),
+                                        msg.id,
+                                        None,
+                                    )
+                                    .await
+                                    {
+                                        error!("{why:#?}");
+                                    }
+                                    last_weekend_id = full_weekend.weekend.id;
+                                    continue;
+                                }
+                                if let Err(why) = update_weekend_message(
+                                    &http,
+                                    &full_weekend,
+                                    channel,
+                                    msg.message.parse().unwrap(),
+                                )
+                                .await
+                                {
+                                    error!("{why:#?}");
+                                }
+                            }
+                        },
+                        Ok(None) => {
+                            match post_weekend_message(
+                                &http,
+                                &full_weekend,
+                                channel,
+                            )
+                            .await
+                            {
+                                Ok(msg) => {
+                                    if let Err(why) = insert_weekend_message(
+                                        db_conn.as_mut(),
+                                        channel,
+                                        msg.into(),
+                                        &full_weekend,
+                                    )
+                                    .await
+                                    {
+                                        error!("{why:#?}");
+                                    }
+                                },
+                                Err(why) => error!("{why:#?}"),
+                            }
+                        },
+                        Err(why) => {
+                            error!("{why:#?}");
+                        },
+                    }
+
+                    let session = match full_weekend.next_session() {
+                        Some(s) => s,
+                        None => continue,
+                    };
+                    let msg_id = match send_notification(
+                        &http,
+                        &full_weekend.weekend,
+                        session,
+                        channel,
+                        cat,
+                        role,
+                    )
+                    .await
+                    {
+                        Ok(d) => d,
+                        Err(why) => {
+                            error!("{why:#?}");
+                            continue;
+                        },
+                    };
+                    if let Err(why) =
+                        mark_session_done(db_conn.as_mut(), session).await
+                    {
+                        error!("{why:#?}");
+                    }
+                    if let Err(why) = create_new_notifications_msg_db(
+                        db_conn.as_mut(),
+                        session,
+                        series,
+                        channel,
+                        msg_id.into(),
+                    )
+                    .await
+                    {
+                        error!("{why:#?}");
+                    }
+                    if full_weekend.check_is_done(session) {
+                            if let Err(why) = mark_weekend_done(
+                                db_conn.as_mut(),
+                                &full_weekend.weekend,
+                            )
+                            .await
+                            {
+                                error!("{why:#?}");
+                                continue;
+                            }
+                            if let Err(why) =
+                                mark_weekend_message_for_series_expired(
+                                    db_conn.as_mut(),
+                                    series,
+                                )
+                                .await
+                            {
+                                error!("{why:#?}");
+                            }
                     }
                 }
             }
@@ -180,4 +337,3 @@ impl EventHandler for Bot {
         }
     }
 }
-

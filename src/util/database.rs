@@ -56,6 +56,67 @@ pub struct FullWeekend {
     pub sessions: Vec<Session>,
 }
 
+impl FullWeekend {
+    pub fn check_is_done(&self, modified_session: &Session) -> bool {
+        if self.weekend.status == WeekendStatus::Done {
+            return true;
+        }
+        self.sessions.iter().all(|f| {
+            if f.id == modified_session.id {
+                return true;
+            }
+            matches!(f.status, SessionStatus::Finished | SessionStatus::Cancelled)
+        })
+    }
+
+    pub fn is_done(&self) -> bool {
+        if self.weekend.status == WeekendStatus::Done {
+            return true;
+        }
+        self.sessions.iter().all(|f| {
+            matches!(f.status, SessionStatus::Finished | SessionStatus::Cancelled)
+        })
+
+    }
+
+    pub fn next_session(&self) -> Option<&Session> {
+        if matches!(self.weekend.status, WeekendStatus::Done) {
+            return None;
+        }
+        self.sessions.iter().find(|f| {
+            matches!(
+                f.status,
+                f1_bot_types::SessionStatus::Open
+                    | f1_bot_types::SessionStatus::Delayed
+            ) && matches!(
+                f.start_date.signed_duration_since(Utc::now()).num_minutes(),
+                0..5
+            )
+        })
+    }
+
+    pub fn weekend_msg_str(&self, extra: bool) -> String {
+        let mut sessions_str = String::new();
+        for session in self.sessions.iter() {
+            let tz = session.start_date.timestamp();
+            let is_done =
+                match Utc::now().timestamp() > tz + session.duration as i64 {
+                    true => "~~",
+                    false => "",
+                };
+            sessions_str += &format!(
+                "\n> `{:>12}` {2}<t:{}:f> (<t:{1}:R>){2}",
+                session.title, tz, is_done
+            );
+        }
+        let extra_str = match extra {
+            true => &format!("\nUse <id:customize> to get the `{}-notifications` role\n**Times are in your Timezone**", self.weekend.series),
+            false => ""
+        };
+        format!("{} {}{}{}", self.weekend.icon, self.weekend.name, sessions_str, extra_str)
+    }
+}
+
 impl Hash for FullWeekend {
     fn hash<H: std::hash::Hasher>(
         &self,
@@ -329,6 +390,21 @@ pub async fn mark_session_done(
         "UPDATE sessions SET STATUS = ? WHERE id = ?",
         SessionStatus::Finished.i8(),
         session.id
+    )
+    .execute(db_conn)
+    .await
+    .map(|_f| ())
+}
+
+pub async fn update_message_hash(
+    db_conn: &mut MySqlConnection,
+    msg_id: u64,
+    hash: u64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "UPDATE messages SET hash = ? WHERE id = ?",
+        hash.to_string(),
+        msg_id
     )
     .execute(db_conn)
     .await

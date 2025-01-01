@@ -49,7 +49,7 @@ impl From<std::num::ParseIntError> for Error {
     }
 }
 
-impl From<Box< dyn StdError>> for Error {
+impl From<Box<dyn StdError>> for Error {
     fn from(value: Box<dyn StdError>) -> Self {
         Error::NNF(value)
     }
@@ -66,7 +66,9 @@ impl fmt::Display for Error {
             Self::Sqlx(inner) => fmt::Display::fmt(&inner, f),
             Self::Serenity(inner) => fmt::Display::fmt(&inner, f),
             Self::NotFound => f.write_str("Not Found (LIB Error)"),
-            Self::NotSameLen => f.write_str("Two Iterators are not the same len."),
+            Self::NotSameLen => {
+                f.write_str("Two Iterators are not the same len.")
+            },
             Self::ParseInt(inner) => fmt::Display::fmt(&inner, f),
             Self::NNF(inner) => fmt::Display::fmt(&inner, f),
         }

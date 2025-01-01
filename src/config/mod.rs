@@ -20,7 +20,10 @@ impl Config<'_> {
         )
     }
 
-    pub fn role(&self, series: Series) -> u64 {
+    pub fn role(
+        &self,
+        series: Series,
+    ) -> u64 {
         match series {
             Series::F1 => self.discord.f1_role,
             Series::F2 => self.discord.f2_role,
@@ -29,7 +32,10 @@ impl Config<'_> {
         }
     }
 
-    pub fn channel(&self, series: Series) -> u64 {
+    pub fn channel(
+        &self,
+        series: Series,
+    ) -> u64 {
         match series {
             Series::F1 => self.discord.f1_channel,
             Series::F2 => self.discord.f2_channel,

@@ -72,7 +72,6 @@ async fn main() -> Result<(), String> {
         cat: cat_data.leak(),
     };
 
-
     let mut client = match ClientBuilder::new(
         &bot.config.discord.bot_token,
         GatewayIntents::non_privileged(),
