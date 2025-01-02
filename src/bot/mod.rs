@@ -66,11 +66,13 @@ impl EventHandler for Bot {
         let mut db_conn = pool.acquire().await.unwrap();
 
         tokio::spawn(async move {
-            let last_weekend_ids = [0, 0, 0, 0u64];
+            let mut last_weekend_ids = [0, 0, 0, 0u64];
             let mut last_invocation = Instant::now();
             loop {
+                info!("LWIs: {last_weekend_ids:?}");
                 tokio::time::sleep(Duration::from_secs(5)).await;
                 // This gives us the ability to abort the task if we want or need to.
+                
                 tokio::task::yield_now().await;
                 if let Err(why) =
                     check_expired_messages(db_conn.as_mut(), &http).await
@@ -110,7 +112,7 @@ impl EventHandler for Bot {
                     let role = conf.role(series);
                     let channel = conf.channel(series);
                     #[allow(unused)]
-                    let mut last_weekend_id = last_weekend_ids[val as usize];
+                    let last_weekend_id = &mut last_weekend_ids[val as usize];
                     let full_weekend = match fetch_next_full_weekend_for_series(
                         db_conn.as_mut(),
                         series,
@@ -137,8 +139,8 @@ impl EventHandler for Bot {
                             continue;
                         },
                     };
-                    if last_weekend_id == 0 {
-                        last_weekend_id = full_weekend.weekend.id;
+                    if *last_weekend_id == 0 {
+                        *last_weekend_id = full_weekend.weekend.id;
                     }
                     if full_weekend.is_done() {
                             if let Err(why) = mark_weekend_done(
@@ -173,7 +175,7 @@ impl EventHandler for Bot {
                                 full_weekend.hash(&mut hasher);
                                 let new_hash = hasher.finish();
                                 if new_hash != hash.parse::<u64>().unwrap() {
-                                    if last_weekend_id
+                                    if *last_weekend_id
                                         != full_weekend.weekend.id
                                     {
                                         if let Err(why) = mark_message_expired(
@@ -185,7 +187,7 @@ impl EventHandler for Bot {
                                         {
                                             error!("{why:#?}");
                                         }
-                                        last_weekend_id =
+                                        *last_weekend_id =
                                             full_weekend.weekend.id;
                                         continue;
                                     }
@@ -210,7 +212,7 @@ impl EventHandler for Bot {
                                     }
                                 }
                             } else {
-                                if last_weekend_id != full_weekend.weekend.id {
+                                if *last_weekend_id != full_weekend.weekend.id {
                                     if let Err(why) = mark_message_expired(
                                         db_conn.as_mut(),
                                         msg.id,
@@ -220,7 +222,7 @@ impl EventHandler for Bot {
                                     {
                                         error!("{why:#?}");
                                     }
-                                    last_weekend_id = full_weekend.weekend.id;
+                                    *last_weekend_id = full_weekend.weekend.id;
                                     continue;
                                 }
                                 if let Err(why) = update_weekend_message(
