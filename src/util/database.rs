@@ -61,6 +61,9 @@ impl FullWeekend {
         if self.weekend.status == WeekendStatus::Done {
             return true;
         }
+        if self.sessions.is_empty() {
+            return false;
+        }
         self.sessions.iter().all(|f| {
             if f.id == modified_session.id {
                 return true;
@@ -73,6 +76,11 @@ impl FullWeekend {
         if self.weekend.status == WeekendStatus::Done {
             return true;
         }
+
+        if self.sessions.is_empty() {
+            return false;
+        }
+
         self.sessions.iter().all(|f| {
             matches!(f.status, SessionStatus::Finished | SessionStatus::Cancelled)
         })
@@ -110,10 +118,10 @@ impl FullWeekend {
             );
         }
         let extra_str = match extra {
-            true => &format!("\nUse <id:customize> to get the `{}-notifications` role\n**Times are in your Timezone**", self.weekend.series),
+            true => &format!("\n\nUse <id:customize> to get the `{}-notifications` role\n**Times are in your Timezone**", self.weekend.series),
             false => ""
         };
-        format!("{} {}{}{}", self.weekend.icon, self.weekend.name, sessions_str, extra_str)
+        format!("## Next Event:\n**{} {}**{}{}", self.weekend.icon, self.weekend.name, sessions_str, extra_str)
     }
 }
 
@@ -123,15 +131,15 @@ impl Hash for FullWeekend {
         state: &mut H,
     ) {
         state.write_u64(self.weekend.id);
-        state.write(self.weekend.name.as_bytes());
+        self.weekend.name.hash(state);
         state.write_i64(self.weekend.start_date.timestamp_micros());
-        state.write(self.weekend.icon.as_bytes());
+        self.weekend.icon.hash(state);
         state.write_i8(self.weekend.status.i8());
         for session in &self.sessions {
             state.write_i64(session.id);
             state.write_i64(session.weekend);
             state.write_i8(session.kind.i8());
-            state.write(session.title.as_bytes());
+            session.title.hash(state);
             state.write_i64(session.start_date.timestamp_micros());
             state.write_i8(session.status.i8());
         }
@@ -229,7 +237,7 @@ pub async fn fetch_weekend_messages(
 ) -> Result<Vec<Message>, sqlx::Error> {
     sqlx::query_as!(
         Message,
-        "SELECT * FROM messages WHERE kind = ?",
+        "SELECT * FROM messages WHERE kind = ? ORDER BY message ASC",
         MessageKind::Weekend.i8()
     )
     .fetch_all(db_conn)
@@ -282,7 +290,7 @@ pub async fn fetch_calendar_messages(
 ) -> Result<Vec<Message>, sqlx::Error> {
     sqlx::query_as!(
         Message,
-        "SELECT * FROM messages WHERE kind = ? AND series = ? ORDER BY posted ASC",
+        "SELECT * FROM messages WHERE kind = ? AND series = ? ORDER BY message ASC",
         MessageKind::Calendar.i8(),
         series.i8()
     )
@@ -308,7 +316,7 @@ pub async fn fetch_series_calendar_messages(
 ) -> Result<Vec<Message>, sqlx::Error> {
     sqlx::query_as!(
         Message,
-        "SELECT * FROM messages WHERE series = ?",
+        "SELECT * FROM messages WHERE series = ? ORDER BY message ASC",
         series.i8()
     )
     .fetch_all(db_conn)

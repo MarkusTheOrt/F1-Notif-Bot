@@ -1,0 +1,12 @@
+services:
+  discord-bot:
+    container_name: f1-notif-bot
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.bot
+    env_file: ./.env
+    volumes:
+      - ./config/:/app/config
+    stdin_open: true
+    tty: true

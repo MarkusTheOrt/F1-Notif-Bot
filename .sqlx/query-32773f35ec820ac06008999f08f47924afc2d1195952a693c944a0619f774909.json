@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT * from weekends WHERE series = ?\nORDER BY start_date ASC\n        ",
+  "query": "SELECT * FROM weekends ORDER BY start_date ASC",
   "describe": {
     "columns": [
       {
@@ -8,8 +8,7 @@
         "name": "id",
         "type_info": {
           "type": "Long",
-          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | UNSIGNED | AUTO_INCREMENT | NUM",
-          "char_set": 63,
+          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | UNSIGNED | AUTO_INCREMENT",
           "max_size": 10
         }
       },
@@ -18,8 +17,7 @@
         "name": "name",
         "type_info": {
           "type": "VarString",
-          "flags": "NOT_NULL | UNIQUE_KEY | NO_DEFAULT_VALUE",
-          "char_set": 255,
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
           "max_size": 1020
         }
       },
@@ -28,8 +26,7 @@
         "name": "year",
         "type_info": {
           "type": "Short",
-          "flags": "NOT_NULL | UNSIGNED | NO_DEFAULT_VALUE | NUM",
-          "char_set": 63,
+          "flags": "NOT_NULL | UNSIGNED | NO_DEFAULT_VALUE",
           "max_size": 5
         }
       },
@@ -38,8 +35,7 @@
         "name": "start_date",
         "type_info": {
           "type": "Timestamp",
-          "flags": "NOT_NULL | MULTIPLE_KEY | BINARY | NO_DEFAULT_VALUE",
-          "char_set": 63,
+          "flags": "NOT_NULL | MULTIPLE_KEY | UNSIGNED | BINARY | TIMESTAMP",
           "max_size": 19
         }
       },
@@ -49,7 +45,6 @@
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | NO_DEFAULT_VALUE",
-          "char_set": 255,
           "max_size": 128
         }
       },
@@ -57,25 +52,23 @@
         "ordinal": 5,
         "name": "series",
         "type_info": {
-          "type": "VarString",
+          "type": "Tiny",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
-          "char_set": 255,
-          "max_size": 64
+          "max_size": 4
         }
       },
       {
         "ordinal": 6,
         "name": "status",
         "type_info": {
-          "type": "VarString",
+          "type": "Tiny",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
-          "char_set": 255,
-          "max_size": 64
+          "max_size": 4
         }
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
       false,
@@ -87,5 +80,5 @@
       false
     ]
   },
-  "hash": "8668df3ac02955442c3f2f0756844a21766ad839ed29f3ed3983e61cf30630f8"
+  "hash": "32773f35ec820ac06008999f08f47924afc2d1195952a693c944a0619f774909"
 }

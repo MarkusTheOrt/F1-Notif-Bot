@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT * FROM messages WHERE kind = ? AND channel = ? AND series = ?",
+  "query": "SELECT * FROM messages WHERE kind = ? ORDER BY message ASC",
   "describe": {
     "columns": [
       {
@@ -8,8 +8,7 @@
         "name": "id",
         "type_info": {
           "type": "Long",
-          "flags": "NOT_NULL | PRIMARY_KEY | UNSIGNED | AUTO_INCREMENT | NUM",
-          "char_set": 63,
+          "flags": "NOT_NULL | PRIMARY_KEY | UNSIGNED | AUTO_INCREMENT",
           "max_size": 10
         }
       },
@@ -17,30 +16,27 @@
         "ordinal": 1,
         "name": "channel",
         "type_info": {
-          "type": "LongLong",
-          "flags": "NOT_NULL | MULTIPLE_KEY | UNSIGNED | NO_DEFAULT_VALUE | NUM",
-          "char_set": 63,
-          "max_size": 20
+          "type": "VarString",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "max_size": 256
         }
       },
       {
         "ordinal": 2,
         "name": "message",
         "type_info": {
-          "type": "LongLong",
-          "flags": "NOT_NULL | UNIQUE_KEY | UNSIGNED | NO_DEFAULT_VALUE | NUM",
-          "char_set": 63,
-          "max_size": 20
+          "type": "VarString",
+          "flags": "NOT_NULL | UNIQUE_KEY | NO_DEFAULT_VALUE",
+          "max_size": 256
         }
       },
       {
         "ordinal": 3,
         "name": "kind",
         "type_info": {
-          "type": "VarString",
+          "type": "Tiny",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
-          "char_set": 255,
-          "max_size": 64
+          "max_size": 4
         }
       },
       {
@@ -48,8 +44,7 @@
         "name": "posted",
         "type_info": {
           "type": "Timestamp",
-          "flags": "NOT_NULL | MULTIPLE_KEY | BINARY | TIMESTAMP",
-          "char_set": 63,
+          "flags": "NOT_NULL | MULTIPLE_KEY | UNSIGNED | BINARY | TIMESTAMP",
           "max_size": 19
         }
       },
@@ -57,25 +52,32 @@
         "ordinal": 5,
         "name": "hash",
         "type_info": {
-          "type": "LongLong",
-          "flags": "MULTIPLE_KEY | UNSIGNED | NUM",
-          "char_set": 63,
-          "max_size": 20
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 256
         }
       },
       {
         "ordinal": 6,
         "name": "series",
         "type_info": {
-          "type": "VarString",
+          "type": "Tiny",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
-          "char_set": 255,
-          "max_size": 64
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "expiry",
+        "type_info": {
+          "type": "Timestamp",
+          "flags": "UNSIGNED | BINARY",
+          "max_size": 19
         }
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 1
     },
     "nullable": [
       false,
@@ -84,8 +86,9 @@
       false,
       false,
       true,
-      false
+      false,
+      true
     ]
   },
-  "hash": "091827d882c7758e12466b469a07cc567448e8b1927fc664f906afec56f36c2a"
+  "hash": "6feb30df330b4b043d24b904814e7db67989af5340f2dbae65ab9f90bb6e314b"
 }

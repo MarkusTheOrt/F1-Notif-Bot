@@ -1,0 +1,17 @@
+FROM rust:alpine AS builder
+WORKDIR /app
+
+COPY . ./
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev openssl-libs-static gcc
+RUN cargo build --release
+
+FROM rust:alpine
+
+WORKDIR /app
+
+COPY --from=builder /app/target/release/f1-notif-bot /app/f1-notif-bot
+
+RUN chmod +x /app/f1-notif-bot
+STOPSIGNAL SIGINT
+
+CMD /app/f1-notif-bot

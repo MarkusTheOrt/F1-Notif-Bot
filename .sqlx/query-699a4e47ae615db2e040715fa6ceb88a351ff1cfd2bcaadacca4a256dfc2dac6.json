@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE sessions SET STATUS = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "699a4e47ae615db2e040715fa6ceb88a351ff1cfd2bcaadacca4a256dfc2dac6"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE messages SET expiry = ? WHERE kind = ? AND series = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "4254e43ffa92e8dbecc5bc884cabc68cf3cf6fe0561c7fa527cbb86d948ab7a6"
+}

@@ -160,40 +160,6 @@ pub async fn create_calendar(
         std::cmp::Ordering::Equal => {},
     }
 
-    for (weekend, message) in weekends.into_iter().zip(messages.into_iter()) {
-        use std::hash::Hash;
-        match message.hash {
-            None => {
-                let mut hasher = DefaultHasher::new();
-                weekend.hash(&mut hasher);
-                let new_hash = hasher.finish();
-                update_calendar_message(
-                    &http,
-                    &weekend,
-                    channel,
-                    message.message.parse()?,
-                )
-                .await?;
-                update_message_hash(conn, message.id, new_hash).await?;
-            },
-            Some(hash) => {
-                let mut hasher = std::hash::DefaultHasher::new();
-                weekend.hash(&mut hasher);
-                let new_hash = hasher.finish();
-                if hash != new_hash.to_string() {
-                    update_calendar_message(
-                        &http,
-                        &weekend,
-                        channel,
-                        message.message.parse()?,
-                    )
-                    .await?;
-                    update_message_hash(conn, message.id, new_hash).await?;
-                }
-            },
-        }
-    }
-
     Ok(())
 }
 
@@ -224,11 +190,12 @@ pub async fn edit_calendar(
         if msg
             .hash
             .as_ref()
-            .map(|f| f.parse::<u64>().unwrap())
-            .is_some_and(|f| f == hash)
+            .is_some_and(|f| *f == hash.to_string())
         {
             continue;
         }
+
+        info!("Updating {} Calendar message for {}...", series, weekend.weekend.name);
 
         let channel_u64: u64 = msg.channel.parse()?;
         let message_u64: u64 = msg.message.parse()?;
@@ -246,7 +213,7 @@ pub async fn edit_calendar(
                 &http,
                 message_u64,
                 EditMessage::new().content(format!(
-                    "{} **{}**{}",
+                    "## {} **{}**{}",
                     weekend.weekend.icon, weekend.weekend.name, sessions_str
                 )),
             )
@@ -389,11 +356,12 @@ pub async fn post_weekend_message(
     http: impl CacheHttp,
     weekend: &FullWeekend,
     channel: u64,
+    series: Series,
 ) -> Result<MessageId, serenity::Error> {
     ChannelId::new(channel)
         .send_message(
             http,
-            CreateMessage::new().content(weekend.weekend_msg_str(true)),
+            CreateMessage::new().content(weekend.weekend_msg_str(matches!(series, Series::F1 | Series::F1Academy))),
         )
         .await
         .map(|f| f.id)
