@@ -6,3 +6,5 @@ services:
       context: .
       dockerfile: ./docker/Dockerfile.bot
     env_file: ./.env
+    volumes:
+      - ./config/:/app/config

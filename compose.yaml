@@ -2,11 +2,7 @@ services:
   discord-bot:
     container_name: f1-notif-bot
     restart: unless-stopped
-    build:
-      context: .
-      dockerfile: ./docker/Dockerfile.bot
+    image: "codeberg.org/mto/f1-notif-bot:latest"
     env_file: ./.env
     volumes:
       - ./config/:/app/config
-    stdin_open: true
-    tty: true
