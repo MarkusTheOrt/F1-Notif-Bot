@@ -4,12 +4,14 @@ pub mod error;
 pub mod util;
 
 use sqlx::{mysql::MySqlConnectOptions, MySqlPool};
-use tracing::info;
 use std::{
     fs::File,
     io::Read,
     sync::{atomic::AtomicBool, Arc},
 };
+use tracing::info;
+
+#[cfg(target_family = "unix")]
 use tokio::signal::unix::SignalKind;
 
 use config::Config;
@@ -78,18 +80,22 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         type_map.insert::<ShardManagerBox>(shard_manager.clone());
     }
 
-    let mut signal = tokio::signal::unix::signal(SignalKind::terminate())
-        .expect("Please work please work");
-    let shard_manager1 = shard_manager.clone();
+    #[cfg(target_family = "unix")]
+    {
+        let mut signal = tokio::signal::unix::signal(SignalKind::terminate())
+            .expect("Please work please work");
+        let shard_manager1 = shard_manager.clone();
+        tokio::spawn(async move {
+            _ = signal.recv().await;
+            info!("Received shutdown signal.");
+            shard_manager1.shutdown_all().await;
+        });
+    }
+
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.expect("failed to enable ctrlc handler");
         info!("Received shutdown signal.");
         shard_manager.shutdown_all().await;
-    });
-    tokio::spawn(async move {
-        _ = signal.recv().await;
-        info!("Received shutdown signal.");
-        shard_manager1.shutdown_all().await;
     });
 
     Ok(client.start_autosharded().await?)

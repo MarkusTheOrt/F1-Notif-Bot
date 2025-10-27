@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::hash::Hash;
 
 use chrono::{DateTime, Utc};
@@ -5,6 +6,7 @@ use f1_bot_types::{
     Message, MessageKind, Series, Session, SessionStatus, Weekend,
     WeekendStatus,
 };
+use serenity::all::CreateMessage;
 use sqlx::MySqlConnection;
 
 pub async fn fetch_weekends(
@@ -57,7 +59,10 @@ pub struct FullWeekend {
 }
 
 impl FullWeekend {
-    pub fn check_is_done(&self, modified_session: &Session) -> bool {
+    pub fn check_is_done(
+        &self,
+        modified_session: &Session,
+    ) -> bool {
         if self.weekend.status == WeekendStatus::Done {
             return true;
         }
@@ -68,7 +73,10 @@ impl FullWeekend {
             if f.id == modified_session.id {
                 return true;
             }
-            matches!(f.status, SessionStatus::Finished | SessionStatus::Cancelled)
+            matches!(
+                f.status,
+                SessionStatus::Finished | SessionStatus::Cancelled
+            )
         })
     }
 
@@ -82,9 +90,11 @@ impl FullWeekend {
         }
 
         self.sessions.iter().all(|f| {
-            matches!(f.status, SessionStatus::Finished | SessionStatus::Cancelled)
+            matches!(
+                f.status,
+                SessionStatus::Finished | SessionStatus::Cancelled
+            )
         })
-
     }
 
     pub fn next_session(&self) -> Option<&Session> {
@@ -103,7 +113,10 @@ impl FullWeekend {
         })
     }
 
-    pub fn weekend_msg_str(&self, extra: bool) -> String {
+    pub fn weekend_msg_str(
+        &self,
+        extra: bool,
+    ) -> String {
         let mut sessions_str = String::new();
         for session in self.sessions.iter() {
             let tz = session.start_date.timestamp();
@@ -121,7 +134,10 @@ impl FullWeekend {
             true => &format!("\n\nUse <id:customize> to get the `{}-notifications` role\n**Times are in your Timezone**", self.weekend.series),
             false => ""
         };
-        format!("## Next Event:\n**{} {}**{}{}", self.weekend.icon, self.weekend.name, sessions_str, extra_str)
+        format!(
+            "## Next Event:\n**{} {}**{}{}",
+            self.weekend.icon, self.weekend.name, sessions_str, extra_str
+        )
     }
 }
 
@@ -130,18 +146,10 @@ impl Hash for FullWeekend {
         &self,
         state: &mut H,
     ) {
-        state.write_u64(self.weekend.id);
-        self.weekend.name.hash(state);
-        state.write_i64(self.weekend.start_date.timestamp_micros());
-        self.weekend.icon.hash(state);
-        state.write_i8(self.weekend.status.i8());
-        for session in &self.sessions {
-            state.write_i64(session.id);
-            state.write_i64(session.weekend);
-            state.write_i8(session.kind.i8());
-            session.title.hash(state);
-            state.write_i64(session.start_date.timestamp_micros());
-            state.write_i8(session.status.i8());
+        self.weekend.hash(state);
+
+        for session in self.sessions.iter() {
+            session.hash(state)
         }
     }
 }
@@ -417,4 +425,43 @@ pub async fn update_message_hash(
     .execute(db_conn)
     .await
     .map(|_f| ())
+}
+
+pub fn create_multi_message(
+    weekends: &[FullWeekend]
+) -> Result<CreateMessage, crate::error::Error> {
+    let mut string = String::with_capacity(512);
+    for weekend in weekends {
+        writeln!(
+            string,
+            "## {} {} {}",
+            weekend.weekend.series, weekend.weekend.year, weekend.weekend.name
+        )?;
+        for session in &weekend.sessions {
+            let session_done = session.start_date
+                + chrono::Duration::seconds(session.duration.into())
+                < Utc::now();
+
+            if session_done {
+                string.push_str("~~");
+            }
+
+            write!(
+                string,
+                "> `{0:>12}`: <t:{1}:f> (<t:{1}:r>)",
+                session.title,
+                session.start_date.timestamp(),
+            )?;
+
+            if session_done {
+                string.push_str("~~");
+            }
+            string.push('\n');
+        }
+        string.push('\n');
+    }
+
+    string.push_str("To get a notification once a session goes live, go to <id:customize> and select the series for which you want to be notified.\nTimes are displayed in your timezone.");
+
+    Ok(CreateMessage::new().content(string))
 }

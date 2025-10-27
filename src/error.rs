@@ -17,6 +17,7 @@ pub enum Error {
     NotSameLen,
     ParseInt(std::num::ParseIntError),
     NNF(Box<dyn StdError>),
+    Fmt(std::fmt::Error)
 }
 
 impl From<sqlx::Error> for Error {
@@ -55,6 +56,12 @@ impl From<Box<dyn StdError>> for Error {
     }
 }
 
+impl From<std::fmt::Error> for Error {
+    fn from(value: std::fmt::Error) -> Self {
+        Error::Fmt(value)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(
         &self,
@@ -71,6 +78,7 @@ impl fmt::Display for Error {
             },
             Self::ParseInt(inner) => fmt::Display::fmt(&inner, f),
             Self::NNF(inner) => fmt::Display::fmt(&inner, f),
+            Self::Fmt(inner) => fmt::Display::fmt(&inner, f),
         }
     }
 }
@@ -86,6 +94,7 @@ impl StdError for Error {
             Self::NotSameLen => None,
             Self::ParseInt(inner) => Some(inner),
             Self::NNF(inner) => inner.source(),
+            Self::Fmt(inner) => inner.source(),
         }
     }
 }
