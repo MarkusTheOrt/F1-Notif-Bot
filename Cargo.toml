@@ -3,6 +3,11 @@ name = "f1-notif-bot"
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+default-run = "f1-notif-bot"
+
+[[bin]]
+path = "tools/migrate.rs"
+name = "migrate"
 
 [dependencies]
 chrono = { version = "0.4.42", features = ["serde"] }
