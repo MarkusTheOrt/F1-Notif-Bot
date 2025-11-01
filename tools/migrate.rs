@@ -1,9 +1,20 @@
+//! Apply Database migrations, making it easy to deploy this bot on a new
+//! install
+//!
+//! ## usage
+//!
+//! Make sure your DATABASE_URL and DATABASE_TOKEN env variables are set.
+//! (You can set these as env variables or use a .env file in your working dir)
+//!
+//! execute this file by using `cargo run --bin migrate`
+
 use std::io::Read;
-
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+    _ = dotenvy::dotenv();
+
     let mut files = Vec::with_capacity(1);
     let dir = std::fs::read_dir("migrations/")?;
     for entry in dir {

@@ -11,7 +11,8 @@ name = "migrate"
 
 [dependencies]
 chrono = { version = "0.4.42", features = ["serde"] }
-f1-bot-types = { git = "https://codeberg.org/MTO/f1-bot-types", version = "0.1.0" }
+dotenvy = "0.15.7"
+f1-bot-types = { git = "https://github.com/MarkusTheOrt/f1-bot-types", version = "0.1.0" }
 libsql = "0.9.24"
 serde = { version = "1.0.228", features = ["derive"] }
 serenity = { git = "https://github.com/serenity-rs/serenity", version = "0.12.4" }
