@@ -7,13 +7,9 @@ use std::{
 };
 
 use chrono::Utc;
-use f1_bot_types::{
-    Message, MessageKind, Series, Session, SessionStatus, Weekend,
-    WeekendStatus,
-};
+use f1_bot_types::{Message, MessageKind, Series, Session, SessionStatus, Weekend, WeekendStatus};
 use serenity::all::{
-    CacheHttp, ChannelId, CreateAttachment, CreateMessage, EditMessage,
-    MessageId, StatusCode,
+    CacheHttp, ChannelId, CreateAttachment, CreateMessage, EditMessage, MessageId, StatusCode,
 };
 use sqlx::MySqlConnection;
 use tracing::{error, info};
@@ -121,7 +117,7 @@ pub async fn delete_latest_calendar_message(
         .await;
     if let Err(serenity::Error::Http(why)) = delete_msg {
         if why.status_code().is_none_or(|f| f != StatusCode::NOT_FOUND) {
-            return Err(Error::Serenity(why.into()));
+            return Err(Error::Serenity(Box::new(why.into())));
         }
     } else {
         return delete_msg.map_err(|e| e.into());
@@ -144,30 +140,29 @@ pub async fn create_calendar(
         std::cmp::Ordering::Less => {
             let diff = weekends.len() - messages.len();
             for _ in 0..diff {
-                create_new_calendar_message(conn, &http, series, channel)
-                    .await?;
+                create_new_calendar_message(conn, &http, series, channel).await?;
                 tokio::time::sleep(Duration::from_millis(300)).await;
             }
             return Ok(());
-        },
+        }
         std::cmp::Ordering::Greater => {
             let diff = messages.len() - weekends.len();
             for _ in 0..diff {
                 delete_latest_calendar_message(conn, &http, series).await?;
             }
             return Ok(());
-        },
-        std::cmp::Ordering::Equal => {},
+        }
+        std::cmp::Ordering::Equal => {}
     }
 
     Ok(())
 }
 
 pub async fn update_calendar_message(
-    http: impl CacheHttp,
-    weekend: &FullWeekend,
-    channel: u64,
-    message: u64,
+    _http: impl CacheHttp,
+    _weekend: &FullWeekend,
+    _channel: u64,
+    _message: u64,
 ) -> Result<(), serenity::Error> {
     Ok(())
 }
@@ -187,15 +182,14 @@ pub async fn edit_calendar(
         let mut hasher = std::hash::DefaultHasher::new();
         weekend.hash(&mut hasher);
         let hash = hasher.finish();
-        if msg
-            .hash
-            .as_ref()
-            .is_some_and(|f| *f == hash.to_string())
-        {
+        if msg.hash.as_ref().is_some_and(|f| *f == hash.to_string()) {
             continue;
         }
 
-        info!("Updating {} Calendar message for {}...", series, weekend.weekend.name);
+        info!(
+            "Updating {} Calendar message for {}...",
+            series, weekend.weekend.name
+        );
 
         let channel_u64: u64 = msg.channel.parse()?;
         let message_u64: u64 = msg.message.parse()?;
@@ -219,11 +213,11 @@ pub async fn edit_calendar(
             )
             .await
         {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(why) => {
                 error!("{why:#?}");
                 continue;
-            },
+            }
         }
 
         if let Err(why) = set_message_hash(db_conn, &msg, hash).await {
@@ -260,8 +254,7 @@ pub async fn check_active_session(
     let Some(session) = weekend.sessions.into_iter().find(|f| {
         matches!(
             f.status,
-            f1_bot_types::SessionStatus::Open
-                | f1_bot_types::SessionStatus::Delayed
+            f1_bot_types::SessionStatus::Open | f1_bot_types::SessionStatus::Delayed
         ) && matches!(
             f.start_date.signed_duration_since(Utc::now()).num_minutes(),
             0..5
@@ -361,7 +354,8 @@ pub async fn post_weekend_message(
     ChannelId::new(channel)
         .send_message(
             http,
-            CreateMessage::new().content(weekend.weekend_msg_str(matches!(series, Series::F1 | Series::F1Academy))),
+            CreateMessage::new()
+                .content(weekend.weekend_msg_str(matches!(series, Series::F1 | Series::F1Academy))),
         )
         .await
         .map(|f| f.id)
@@ -376,7 +370,17 @@ pub async fn insert_weekend_message(
     let mut hasher = DefaultHasher::new();
     weekend.hash(&mut hasher);
     let hash = hasher.finish();
-    sqlx::query!("INSERT INTO messages (channel, message, hash, kind, series) VALUES (?, ?, ?, ?, ?)", channel, message, hash, MessageKind::Weekend.i8(), weekend.weekend.series.i8()).execute(db_conn).await.map(|_f| ())
+    sqlx::query!(
+        "INSERT INTO messages (channel, message, hash, kind, series) VALUES (?, ?, ?, ?, ?)",
+        channel,
+        message,
+        hash,
+        MessageKind::Weekend.i8(),
+        weekend.weekend.series.i8()
+    )
+    .execute(db_conn)
+    .await
+    .map(|_f| ())
 }
 
 pub async fn update_weekend_message(

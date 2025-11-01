@@ -9,6 +9,10 @@ default-run = "f1-notif-bot"
 path = "tools/migrate.rs"
 name = "migrate"
 
+[[bin]]
+path = "tools/docker-build.rs"
+name = "docker-build"
+
 [dependencies]
 chrono = { version = "0.4.42", features = ["serde"] }
 dotenvy = "0.15.7"

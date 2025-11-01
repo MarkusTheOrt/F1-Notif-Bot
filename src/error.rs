@@ -11,13 +11,13 @@ pub type Result<T> = StdResult<T, Error>;
 pub enum Error {
     Io(io::Error),
     Toml(toml::ser::Error),
-    Serenity(serenity::Error),
+    Serenity(Box<serenity::Error>),
     Sqlx(sqlx::Error),
     NotFound,
     NotSameLen,
     ParseInt(std::num::ParseIntError),
     NNF(Box<dyn StdError>),
-    Fmt(std::fmt::Error)
+    Fmt(std::fmt::Error),
 }
 
 impl From<sqlx::Error> for Error {
@@ -40,7 +40,7 @@ impl From<toml::ser::Error> for Error {
 
 impl From<serenity::Error> for Error {
     fn from(value: serenity::Error) -> Self {
-        Error::Serenity(value)
+        Error::Serenity(Box::new(value))
     }
 }
 
@@ -63,19 +63,14 @@ impl From<std::fmt::Error> for Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-    ) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(inner) => fmt::Display::fmt(&inner, f),
             Self::Toml(inner) => fmt::Display::fmt(&inner, f),
             Self::Sqlx(inner) => fmt::Display::fmt(&inner, f),
             Self::Serenity(inner) => fmt::Display::fmt(&inner, f),
             Self::NotFound => f.write_str("Not Found (LIB Error)"),
-            Self::NotSameLen => {
-                f.write_str("Two Iterators are not the same len.")
-            },
+            Self::NotSameLen => f.write_str("Two Iterators are not the same len."),
             Self::ParseInt(inner) => fmt::Display::fmt(&inner, f),
             Self::NNF(inner) => fmt::Display::fmt(&inner, f),
             Self::Fmt(inner) => fmt::Display::fmt(&inner, f),

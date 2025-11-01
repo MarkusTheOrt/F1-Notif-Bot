@@ -82,8 +82,8 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(target_family = "unix")]
     {
-        let mut signal = tokio::signal::unix::signal(SignalKind::terminate())
-            .expect("Please work please work");
+        let mut signal =
+            tokio::signal::unix::signal(SignalKind::terminate()).expect("Please work please work");
         let shard_manager1 = shard_manager.clone();
         tokio::spawn(async move {
             _ = signal.recv().await;
@@ -93,7 +93,9 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.expect("failed to enable ctrlc handler");
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to enable ctrlc handler");
         info!("Received shutdown signal.");
         shard_manager.shutdown_all().await;
     });
