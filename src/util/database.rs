@@ -3,47 +3,93 @@ use std::hash::Hash;
 
 use chrono::{DateTime, Utc};
 use f1_bot_types::{Message, MessageKind, Series, Session, SessionStatus, Weekend, WeekendStatus};
+use libsql::params;
 use serenity::all::CreateMessage;
-use sqlx::MySqlConnection;
 
-pub async fn fetch_weekends(db_conn: &mut MySqlConnection) -> Result<Vec<Weekend>, sqlx::Error> {
-    sqlx::query_as!(Weekend, "SELECT * FROM weekends ORDER BY start_date ASC")
-        .fetch_all(db_conn)
-        .await
+use crate::error::Error::Io;
+
+pub async fn fetch_all<T>(
+    db_conn: &mut libsql::Connection,
+    sql: &str,
+    params: impl libsql::params::IntoParams,
+) -> Result<Vec<T>, crate::error::Error>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let mut result = db_conn.query(sql, params).await?;
+    let mut return_value = Vec::with_capacity(10);
+    while let Ok(Some(row)) = result.next().await {
+        return_value.push(libsql::de::from_row::<T>(&row)?);
+    }
+    Ok(return_value)
+}
+
+pub async fn fetch_single<T>(
+    db_conn: &mut libsql::Connection,
+    sql: &str,
+    params: impl libsql::params::IntoParams,
+) -> Result<Option<T>, crate::error::Error>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let mut result = db_conn.query(sql, params).await?;
+    if let Ok(Some(row)) = result.next().await {
+        Ok(Some(libsql::de::from_row::<T>(&row)?))
+    } else {
+        Ok(None)
+    }
+}
+
+pub async fn fetch_weekends(
+    db_conn: &mut libsql::Connection,
+) -> Result<Vec<Weekend>, crate::error::Error> {
+    fetch_all(
+        db_conn,
+        "SELECT * FROM weekends ORDER BY start_date ASC",
+        params![],
+    )
+    .await
 }
 
 pub async fn fetch_weekend(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     id: u64,
-) -> Result<Option<Weekend>, sqlx::Error> {
-    sqlx::query_as!(Weekend, "SELECT * FROM weekends WHERE id = ?", id)
-        .fetch_optional(db_conn)
-        .await
+) -> Result<Option<Weekend>, crate::error::Error> {
+    fetch_single(db_conn, "SELECT * FROM weekends WHERE id = ?", params![id]).await
 }
 
 pub async fn fetch_weekend_for_series(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     series: Series,
-) -> Result<Vec<Weekend>, sqlx::Error> {
-    sqlx::query_as!(
-        Weekend,
+) -> Result<Vec<Weekend>, crate::error::Error> {
+    fetch_all(
+        db_conn,
         "SELECT * FROM weekends WHERE series = ? ORDER BY start_date ASC",
-        series.i8()
+        params![series.i8()],
     )
-    .fetch_all(db_conn)
+    .await
+}
+
+pub async fn fetch_feeder_weekend(
+    db_conn: &mut libsql::Connection,
+) -> Result<Vec<Weekend>, crate::error::Error> {
+    fetch_all(
+        db_conn,
+        "SELECT * FROM weekends WHERE series != ? ORDER BY start_date ASC",
+        params![Series::F1.i8()],
+    )
     .await
 }
 
 pub async fn fetch_sessions(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     weekend: &Weekend,
-) -> Result<Vec<Session>, sqlx::Error> {
-    sqlx::query_as!(
-        Session,
+) -> Result<Vec<Session>, crate::error::Error> {
+    fetch_all(
+        db_conn,
         "SELECT * FROM sessions WHERE weekend = ? ORDER BY start_date ASC",
-        weekend.id
+        params![weekend.id],
     )
-    .fetch_all(db_conn)
     .await
 }
 
@@ -112,8 +158,11 @@ impl FullWeekend {
             );
         }
         let extra_str = match extra {
-            true => &format!("\n\nUse <id:customize> to get the `{}-notifications` role\n**Times are in your Timezone**", self.weekend.series),
-            false => ""
+            true => &format!(
+                "\n\nUse <id:customize> to get the `{}-notifications` role\n**Times are in your Timezone**",
+                self.weekend.series
+            ),
+            false => "",
         };
         format!(
             "## Next Event:\n**{} {}**{}{}",
@@ -133,9 +182,9 @@ impl Hash for FullWeekend {
 }
 
 pub async fn fetch_full_weekends_for_series(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     series: Series,
-) -> Result<Vec<FullWeekend>, sqlx::Error> {
+) -> Result<Vec<FullWeekend>, crate::error::Error> {
     let weekends = fetch_weekend_for_series(db_conn, series).await?;
     let mut return_weekends = Vec::with_capacity(weekends.len());
     for weekend in weekends.into_iter() {
@@ -146,8 +195,8 @@ pub async fn fetch_full_weekends_for_series(
 }
 
 pub async fn fetch_full_weekends(
-    db_conn: &mut MySqlConnection,
-) -> Result<Vec<FullWeekend>, sqlx::Error> {
+    db_conn: &mut libsql::Connection,
+) -> Result<Vec<FullWeekend>, crate::error::Error> {
     let weekends = fetch_weekends(db_conn).await?;
     let mut return_weekends = Vec::with_capacity(weekends.len());
     for weekend in weekends.into_iter() {
@@ -158,12 +207,10 @@ pub async fn fetch_full_weekends(
 }
 
 pub async fn fetch_full_weekend(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     id: u64,
-) -> Result<Option<FullWeekend>, sqlx::Error> {
-    let weekend = sqlx::query_as!(Weekend, "SELECT * FROM weekends WHERE id = ?", id)
-        .fetch_optional(&mut *db_conn)
-        .await?;
+) -> Result<Option<FullWeekend>, crate::error::Error> {
+    let weekend = fetch_weekend(db_conn, id).await?;
     Ok(match weekend {
         None => None,
         Some(weekend) => {
@@ -174,23 +221,21 @@ pub async fn fetch_full_weekend(
 }
 
 pub async fn fetch_next_weekend_for_series(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     series: Series,
-) -> Result<Option<Weekend>, sqlx::Error> {
-    sqlx::query_as!(
-        Weekend,
+) -> Result<Option<Weekend>, crate::error::Error> {
+    fetch_single(
+        db_conn,
         "SELECT * FROM weekends WHERE series = ? AND status != ? ORDER BY start_date ASC LIMIT 1",
-        series.i8(),
-        WeekendStatus::Done.i8(),
+        params![series.i8(), WeekendStatus::Done.i8()],
     )
-    .fetch_optional(db_conn)
     .await
 }
 
 pub async fn fetch_next_full_weekend_for_series(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     series: Series,
-) -> Result<Option<FullWeekend>, sqlx::Error> {
+) -> Result<Option<FullWeekend>, crate::error::Error> {
     let weekend = fetch_next_weekend_for_series(db_conn, series).await?;
     Ok(match weekend {
         None => None,
@@ -201,132 +246,135 @@ pub async fn fetch_next_full_weekend_for_series(
     })
 }
 
-pub async fn fetch_messages(db_conn: &mut MySqlConnection) -> Result<Vec<Message>, sqlx::Error> {
-    sqlx::query_as!(Message, "SELECT * FROM messages")
-        .fetch_all(db_conn)
-        .await
+pub async fn fetch_messages(
+    db_conn: &mut libsql::Connection,
+) -> Result<Vec<Message>, crate::error::Error> {
+    fetch_all(db_conn, "SELECT * FROM messages", params![]).await
 }
 
 pub async fn fetch_weekend_messages(
-    db_conn: &mut MySqlConnection,
-) -> Result<Vec<Message>, sqlx::Error> {
-    sqlx::query_as!(
-        Message,
+    db_conn: &mut libsql::Connection,
+) -> Result<Vec<Message>, crate::error::Error> {
+    fetch_all(
+        db_conn,
         "SELECT * FROM messages WHERE kind = ? ORDER BY message ASC",
-        MessageKind::Weekend.i8()
+        params![MessageKind::Weekend.i8()],
     )
-    .fetch_all(db_conn)
     .await
 }
 
 pub async fn mark_weekend_message_for_series_expired(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     series: Series,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        "UPDATE messages SET expiry = ? WHERE kind = ? AND series = ?",
-        Utc::now(),
-        MessageKind::Weekend.i8(),
-        series.i8()
-    )
-    .execute(db_conn)
-    .await
-    .map(|_f| ())
+) -> Result<u64, crate::error::Error> {
+    let now_str = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    Ok(db_conn
+        .execute(
+            "UPDATE messages SET expiry = ? WHERE kind = ? AND series = ?",
+            params![now_str, MessageKind::Weekend.i8(), series.i8()],
+        )
+        .await?)
 }
 
 pub async fn fetch_weekend_message_for_series(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     series: Series,
-) -> Result<Option<Message>, sqlx::Error> {
-    sqlx::query_as!(
-        Message,
+) -> Result<Option<Message>, crate::error::Error> {
+    fetch_single(
+        db_conn,
         "SELECT * FROM messages WHERE kind = ? and series = ?",
-        MessageKind::Weekend.i8(),
-        series.i8()
+        params![MessageKind::Weekend.i8(), series.i8()],
     )
-    .fetch_optional(db_conn)
     .await
 }
 
-pub async fn expired_messages(db_conn: &mut MySqlConnection) -> Result<Vec<Message>, sqlx::Error> {
-    sqlx::query_as!(
-        Message,
-        "SELECT * FROM messages WHERE expiry IS NOT NULL AND expiry < now()"
+pub async fn expired_messages(
+    db_conn: &mut libsql::Connection,
+) -> Result<Vec<Message>, crate::error::Error> {
+    fetch_all(
+        db_conn,
+        "SELECT * FROM messages WHERE expiry IS NOT NULL AND expiry < now()",
+        params![],
     )
-    .fetch_all(db_conn)
     .await
 }
 
 pub async fn fetch_calendar_messages(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     series: Series,
-) -> Result<Vec<Message>, sqlx::Error> {
-    sqlx::query_as!(
-        Message,
+) -> Result<Vec<Message>, crate::error::Error> {
+    fetch_all(
+        db_conn,
         "SELECT * FROM messages WHERE kind = ? AND series = ? ORDER BY message ASC",
-        MessageKind::Calendar.i8(),
-        series.i8()
+        params![MessageKind::Calendar.i8(), series.i8()],
     )
-    .fetch_all(db_conn)
     .await
 }
 
 pub async fn fetch_custom_messages(
-    db_conn: &mut MySqlConnection,
-) -> Result<Vec<Message>, sqlx::Error> {
-    sqlx::query_as!(
-        Message,
+    db_conn: &mut libsql::Connection,
+) -> Result<Vec<Message>, crate::error::Error> {
+    fetch_all(
+        db_conn,
         "SELECT * FROM messages WHERE kind = ?",
-        MessageKind::Custom.i8()
+        params![MessageKind::Custom.i8()],
     )
-    .fetch_all(db_conn)
     .await
 }
 
 pub async fn fetch_series_calendar_messages(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     series: Series,
-) -> Result<Vec<Message>, sqlx::Error> {
-    sqlx::query_as!(
-        Message,
+) -> Result<Vec<Message>, crate::error::Error> {
+    fetch_all(
+        db_conn,
         "SELECT * FROM messages WHERE series = ? ORDER BY message ASC",
-        series.i8()
+        params![series.i8()],
     )
-    .fetch_all(db_conn)
     .await
 }
 
 /// Sets a [Messages](Message) expiry date.
 /// If *date* is set to [None] then the message is set to expire immediately
 pub async fn mark_message_expired(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     id: u64,
     date: Option<DateTime<Utc>>,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), crate::error::Error> {
     let date = date.unwrap_or(Utc::now());
-    let result = sqlx::query!("UPDATE messages SET expiry = ? WHERE id = ?", date, id)
-        .execute(db_conn)
+    let date_str = date.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let rows_affected = db_conn
+        .execute(
+            "UPDATE messages SET expiry = ? WHERE id = ?",
+            params![date_str, id],
+        )
         .await?;
-    if result.rows_affected() == 0 {
-        return Err(sqlx::Error::RowNotFound);
+    if rows_affected == 0 {
+        return Err(Io(std::io::Error::from(std::io::ErrorKind::NotFound)));
     }
     Ok(())
 }
 
 /// Deletes a [Message]
-pub async fn delete_message(db_conn: &mut MySqlConnection, id: u64) -> Result<(), sqlx::Error> {
-    let result = sqlx::query!("DELETE FROM messages WHERE id = ?", id)
-        .execute(db_conn)
+pub async fn delete_message(
+    db_conn: &mut libsql::Connection,
+    id: u64,
+) -> Result<(), crate::error::Error> {
+    let rows_affected = db_conn
+        .execute("DELETE FROM messages WHERE id = ?", params![id])
         .await?;
-    if result.rows_affected() == 0 {
-        return Err(sqlx::Error::RowNotFound);
+    if rows_affected == 0 {
+        return Err(Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "No Rows to delete found.",
+        )));
     }
     Ok(())
 }
 
 /// Checks [Weekends](Weekend) and if all [Sessions](Session) are [Finished](SessionStatus)
 /// or [Cancelled](SessionStatus), then mark these Weekends as [Done](SessionStatus).
-pub async fn check_weekends(db_conn: &mut MySqlConnection) -> Result<(), sqlx::Error> {
+pub async fn check_weekends(db_conn: &mut libsql::Connection) -> Result<(), crate::error::Error> {
     let weekends = fetch_full_weekends(db_conn).await?;
     for weekend in weekends
         .into_iter()
@@ -345,46 +393,40 @@ pub async fn check_weekends(db_conn: &mut MySqlConnection) -> Result<(), sqlx::E
 
 /// Marks a [Weekend] as [Done](WeekendStatus::Done)
 pub async fn mark_weekend_done(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     weekend: &Weekend,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        "UPDATE weekends SET status = ? WHERE id = ?",
-        WeekendStatus::Done.i8(),
-        weekend.id
-    )
-    .execute(db_conn)
-    .await
-    .map(|_f| ())
+) -> Result<u64, crate::error::Error> {
+    Ok(db_conn
+        .execute(
+            "UPDATE weekends SET STATUS = ? WHERE id = ?",
+            params![WeekendStatus::Done.i8(), weekend.id],
+        )
+        .await?)
 }
 
 pub async fn mark_session_done(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     session: &Session,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        "UPDATE sessions SET STATUS = ? WHERE id = ?",
-        SessionStatus::Finished.i8(),
-        session.id
-    )
-    .execute(db_conn)
-    .await
-    .map(|_f| ())
+) -> Result<u64, crate::error::Error> {
+    Ok(db_conn
+        .execute(
+            "UPDATE sessions SET STATUS = ? WHERE id = ?",
+            params![SessionStatus::Finished.i8(), session.id],
+        )
+        .await?)
 }
 
 pub async fn update_message_hash(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     msg_id: u64,
     hash: u64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        "UPDATE messages SET hash = ? WHERE id = ?",
-        hash.to_string(),
-        msg_id
-    )
-    .execute(db_conn)
-    .await
-    .map(|_f| ())
+) -> Result<u64, crate::error::Error> {
+    Ok(db_conn
+        .execute(
+            "UPDATE messages SET hash = ? WHERE id = ?",
+            params![hash.to_string(), msg_id],
+        )
+        .await?)
 }
 
 pub fn create_multi_message(

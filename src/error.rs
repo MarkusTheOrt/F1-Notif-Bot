@@ -12,17 +12,24 @@ pub enum Error {
     Io(io::Error),
     Toml(toml::ser::Error),
     Serenity(Box<serenity::Error>),
-    Sqlx(sqlx::Error),
+    Libsql(libsql::Error),
     NotFound,
     NotSameLen,
     ParseInt(std::num::ParseIntError),
     NNF(Box<dyn StdError>),
     Fmt(std::fmt::Error),
+    De(serde::de::value::Error),
 }
 
-impl From<sqlx::Error> for Error {
-    fn from(value: sqlx::Error) -> Self {
-        Error::Sqlx(value)
+impl From<serde::de::value::Error> for Error {
+    fn from(value: serde::de::value::Error) -> Self {
+        Error::De(value)
+    }
+}
+
+impl From<libsql::Error> for Error {
+    fn from(value: libsql::Error) -> Self {
+        Error::Libsql(value)
     }
 }
 
@@ -67,13 +74,14 @@ impl fmt::Display for Error {
         match self {
             Self::Io(inner) => fmt::Display::fmt(&inner, f),
             Self::Toml(inner) => fmt::Display::fmt(&inner, f),
-            Self::Sqlx(inner) => fmt::Display::fmt(&inner, f),
+            Self::Libsql(inner) => fmt::Display::fmt(&inner, f),
             Self::Serenity(inner) => fmt::Display::fmt(&inner, f),
             Self::NotFound => f.write_str("Not Found (LIB Error)"),
             Self::NotSameLen => f.write_str("Two Iterators are not the same len."),
             Self::ParseInt(inner) => fmt::Display::fmt(&inner, f),
             Self::NNF(inner) => fmt::Display::fmt(&inner, f),
             Self::Fmt(inner) => fmt::Display::fmt(&inner, f),
+            Self::De(inner) => fmt::Display::fmt(&inner, f),
         }
     }
 }
@@ -84,12 +92,13 @@ impl StdError for Error {
             Self::Io(inner) => Some(inner),
             Self::Toml(inner) => Some(inner),
             Self::Serenity(inner) => Some(inner),
-            Self::Sqlx(inner) => Some(inner),
+            Self::Libsql(inner) => Some(inner),
             Self::NotFound => None,
             Self::NotSameLen => None,
             Self::ParseInt(inner) => Some(inner),
             Self::NNF(inner) => inner.source(),
             Self::Fmt(inner) => inner.source(),
+            Self::De(inner) => inner.source(),
         }
     }
 }

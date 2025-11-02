@@ -8,10 +8,10 @@ use std::{
 
 use chrono::Utc;
 use f1_bot_types::{Message, MessageKind, Series, Session, SessionStatus, Weekend, WeekendStatus};
+use libsql::params;
 use serenity::all::{
     CacheHttp, ChannelId, CreateAttachment, CreateMessage, EditMessage, MessageId, StatusCode,
 };
-use sqlx::MySqlConnection;
 use tracing::{error, info};
 
 use crate::{config::Config, error::Error};
@@ -41,7 +41,7 @@ fn generate_default_config() -> Result<(), Error> {
 
 /// Fetches and Deletes all expired messages.
 pub async fn check_expired_messages(
-    conn: &mut MySqlConnection,
+    conn: &mut libsql::Connection,
     http: impl CacheHttp,
 ) -> Result<(), crate::error::Error> {
     let expired_messages = expired_messages(conn).await?;
@@ -71,35 +71,32 @@ pub async fn check_expired_messages(
 }
 
 pub async fn create_new_calendar_message(
-    conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     http: impl CacheHttp,
     series: Series,
     channel: u64,
-) -> Result<(), crate::error::Error> {
+) -> Result<u64, crate::error::Error> {
     let new_message = ChannelId::new(channel)
         .send_message(
             http.http(),
             CreateMessage::new().content("*Reserved for Future use.*"),
         )
         .await?;
-
-    sqlx::query!(
-        "INSERT INTO messages 
-(channel, message, kind, series) 
-VALUES (?, ?, ?, ?)",
-        channel.to_string(),
-        new_message.id.to_string(),
-        MessageKind::Calendar.i8(),
-        series.i8()
-    )
-    .execute(conn)
-    .await?;
-
-    Ok(())
+    Ok(db_conn
+        .execute(
+            "INSERT INTO messages (channel, message, kind, series) VALUES (?, ?, ?, ?)",
+            params![
+                channel.to_string(),
+                new_message.id.to_string(),
+                MessageKind::Calendar.i8(),
+                series.i8()
+            ],
+        )
+        .await?)
 }
 
 pub async fn delete_latest_calendar_message(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     http: impl CacheHttp,
     series: Series,
 ) -> Result<(), crate::error::Error> {
@@ -129,7 +126,7 @@ pub async fn delete_latest_calendar_message(
 }
 
 pub async fn create_calendar(
-    conn: &mut MySqlConnection,
+    conn: &mut libsql::Connection,
     http: impl CacheHttp,
     series: Series,
     channel: u64,
@@ -168,7 +165,7 @@ pub async fn update_calendar_message(
 }
 
 pub async fn edit_calendar(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     http: impl CacheHttp,
     series: Series,
 ) -> Result<(), crate::error::Error> {
@@ -229,22 +226,20 @@ pub async fn edit_calendar(
 }
 
 pub async fn set_message_hash(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     message: &Message,
     hash: u64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        "UPDATE messages SET HASH = ? WHERE id = ?",
-        hash.to_string(),
-        message.id
-    )
-    .execute(db_conn)
-    .await
-    .map(|_f| ())
+) -> Result<u64, crate::error::Error> {
+    Ok(db_conn
+        .execute(
+            "UPDATE messages SET HASH = ? WHERE id = ?",
+            params![hash.to_string(), message.id],
+        )
+        .await?)
 }
 
 pub async fn check_active_session(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     series: Series,
 ) -> Result<Option<(Weekend, Session)>, crate::error::Error> {
     let weekend = fetch_next_full_weekend_for_series(db_conn, series).await?;
@@ -267,26 +262,25 @@ pub async fn check_active_session(
 }
 
 pub async fn create_new_notifications_msg_db(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     session: &Session,
     series: Series,
     channel: u64,
     message: u64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        "INSERT INTO messages 
-(channel, message, kind, posted, series, expiry) 
-VALUES(?, ?, ?, ?, ?, ?)",
+) -> Result<u64, crate::error::Error> {
+    let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let expiry = (Utc::now() + Duration::from_secs(session.duration as u64))
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    Ok(db_conn.execute(
+        "INSERT INTO messages (channel, message, kind, posted, series, expiry) VALUES (?, ?, ?, ?, ?, ?)", 
+        params![
         channel.to_string(),
         message.to_string(),
         MessageKind::Notification.i8(),
-        Utc::now(),
+        now,
         series.i8(),
-        Utc::now() + Duration::from_secs(session.duration as u64)
-    )
-    .execute(db_conn)
-    .await
-    .map(|_f| ())
+        expiry
+    ]).await?)
 }
 
 pub async fn send_notification(
@@ -316,10 +310,10 @@ pub async fn send_notification(
 }
 
 pub async fn check_expired_weekend(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     weekend: &Weekend,
     session: &Session,
-) -> Result<Option<Series>, sqlx::Error> {
+) -> Result<Option<Series>, crate::error::Error> {
     let weekend = match fetch_full_weekend(db_conn, weekend.id).await? {
         Some(d) => d,
         None => return Ok(None),
@@ -362,25 +356,26 @@ pub async fn post_weekend_message(
 }
 
 pub async fn insert_weekend_message(
-    db_conn: &mut MySqlConnection,
+    db_conn: &mut libsql::Connection,
     channel: u64,
     message: u64,
     weekend: &FullWeekend,
-) -> Result<(), sqlx::Error> {
+) -> Result<u64, crate::error::Error> {
     let mut hasher = DefaultHasher::new();
     weekend.hash(&mut hasher);
     let hash = hasher.finish();
-    sqlx::query!(
-        "INSERT INTO messages (channel, message, hash, kind, series) VALUES (?, ?, ?, ?, ?)",
-        channel,
-        message,
-        hash,
-        MessageKind::Weekend.i8(),
-        weekend.weekend.series.i8()
-    )
-    .execute(db_conn)
-    .await
-    .map(|_f| ())
+    Ok(db_conn
+        .execute(
+            "INSERT INTO messages (channel, message, hash, kind, series) VALUES (?, ?, ?, ?, ?)",
+            params![
+                channel,
+                message,
+                hash,
+                MessageKind::Weekend.i8(),
+                weekend.weekend.series.i8()
+            ],
+        )
+        .await?)
 }
 
 pub async fn update_weekend_message(

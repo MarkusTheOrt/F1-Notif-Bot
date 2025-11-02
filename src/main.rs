@@ -3,11 +3,10 @@ pub mod config;
 pub mod error;
 pub mod util;
 
-use sqlx::{mysql::MySqlConnectOptions, MySqlPool};
 use std::{
     fs::File,
     io::Read,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{Arc, atomic::AtomicBool},
 };
 use tracing::info;
 
@@ -31,6 +30,8 @@ impl TypeMapKey for ShardManagerBox {
 
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    _ = dotenvy::dotenv();
+
     tracing_subscriber::fmt().init();
 
     let mut config = match File::open("./config/config.toml") {
@@ -41,14 +42,12 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     config.read_to_string(&mut string)?;
     let config = toml::from_str::<Config>(string.as_str())?;
 
-    let db_options = MySqlConnectOptions::new()
-        .username(&config.database.username)
-        .password(&config.database.password)
-        .host(&config.database.url)
-        .port(3306)
-        .database("fia-docs");
-
-    let database = MySqlPool::connect_with(db_options).await?;
+    let database = libsql::Builder::new_remote(
+        std::env::var("DATABASE_URL")?,
+        std::env::var("DATABASE_TOKEN")?,
+    )
+    .build()
+    .await?;
 
     let mut cat_video = File::open("./config/cats.mp4")?;
 
